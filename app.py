@@ -193,8 +193,8 @@ with st.sidebar:
 
     stream_query = st.text_input("Search query", value="data scientist machine learning")
     if st.button("⬇️ Fetch New Jobs", use_container_width=True):
-        with st.spinner("Fetching from Adzuna …"):
-            stats = ingestion.manual_fetch(query=stream_query)
+        with st.spinner("Fetching 500+ jobs from Adzuna (this takes ~10 seconds) …"):
+            stats = ingestion.manual_fetch(query=stream_query, max_pages=11)
         st.success(f"✅ Fetched {stats['fetched']} | New: {stats['new']} | Dupes: {stats['dupes']}")
         st.session_state.ranked_jobs = None   # refresh results
 
