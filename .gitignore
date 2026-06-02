@@ -1,0 +1,26 @@
+# Secrets - NEVER commit
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.env
+venv/
+.venv/
+
+# Data (large files - commit only compressed/indexes)
+data/jobpilot.db
+data/jobs_snapshot.csv
+data/*.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Kaggle credentials
+~/.kaggle/
