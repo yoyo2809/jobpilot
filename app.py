@@ -13,6 +13,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))
 
 from engine import database as db
+db.initialize_db()
 from engine.embeddings import EmbeddingEngine, get_engine
 from engine.ranking import UserPreferences, rank_jobs, explain_ranking
 from engine import feedback as fb_engine
@@ -115,7 +116,6 @@ def load_engine() -> EmbeddingEngine:
     if not engine.load_index():
         # Auto-build if index doesn't exist
         st.info("Building search index for the first time … (~2 min)")
-        db.initialize_db()
         jobs_df = db.get_all_jobs_for_indexing()
         if not jobs_df.empty:
             engine.build_index(jobs_df)
@@ -222,7 +222,6 @@ with st.sidebar:
 # ════════════════════════════════════════════════════════════════════════════════
 # MAIN CONTENT
 # ════════════════════════════════════════════════════════════════════════════════
-db.initialize_db()
 job_count = db.get_job_count()
 
 if job_count == 0:
