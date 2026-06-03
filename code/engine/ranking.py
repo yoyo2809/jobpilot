@@ -148,16 +148,11 @@ def _stage2_filter(
                 blocked = True
                 break
             # For description, only block if it's explicitly stated as a requirement or level
-            # e.g., "Level: Senior" or "5+ years"
             if pattern in desc:
-                # Be very careful with description dealbreakers to avoid false positives
-                # If the dealbreaker is a seniority level, it's safer to only trust the primary text
-                if pattern in ("senior", "junior", "staff", "principal", "entry", "associate"):
-                    continue # Ignore seniority mentions in description (e.g., "report to senior dev")
-                if pattern in desc:
-                    removed[job_id] = f'Contains dealbreaker keyword in desc: "{db_kw}"'
-                    blocked = True
-                    break
+                # We strictly enforce dealbreakers in descriptions as per persona Pass Criteria
+                removed[job_id] = f'Contains dealbreaker keyword in desc: "{db_kw}"'
+                blocked = True
+                break
 
         if blocked:
             continue

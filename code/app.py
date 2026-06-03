@@ -176,9 +176,10 @@ with st.sidebar:
     visa_req  = st.toggle("Needs visa sponsorship", value=False)
 
     dealbreaker_options = [
-        "Junior", "Entry Level", "Contract", "Internship",
+        "Junior", "Entry", "Entry Level", "Internship",
+        "Contract", "1099", "Temporary",
         "Senior", "Staff", "Principal", "Director", "VP",
-        "5+ years", "7+ years", "10+ years",
+        "3+ years", "5+ years", "7+ years", "10+ years",
         "Defense", "Military"
     ]
     dealbreakers = st.multiselect(
