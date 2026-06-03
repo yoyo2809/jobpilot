@@ -62,8 +62,8 @@ def rank_jobs(
     Full three-stage pipeline.
     Returns a DataFrame with ranked jobs + per-job score breakdown.
     """
-    # Stage 1 — recall
-    candidates = _stage1_recall(profile_text, embedding_engine, k=200)
+    # Stage 1 — recall (Increase k to 1000 to prevent post-filtering starvation)
+    candidates = _stage1_recall(profile_text, embedding_engine, k=1000)
     if candidates.empty:
         return pd.DataFrame()
 
@@ -311,16 +311,38 @@ def _role_match_score(row: pd.Series, target_roles: List[str]) -> float:
         # Exact title match → full score
         if role_lower in title:
             best_score = max(best_score, 1.0)
-        # Partial match: individual keywords from role appear in title
+            continue
+            
+        # Strict matching: ML Engineer shouldn't match Software Engineer
+        # If the target role is "ML Engineer", they MUST have "ML" or "Machine Learning"
         role_words = [w for w in role_lower.split() if len(w) > 2]
+        
+        # Build strict keywords
+        strict_kws = []
+        if "ml" in role_lower.split() or "machine learning" in role_lower:
+            strict_kws.extend(["ml", "machine learning", "ai", "artificial intelligence"])
+        if "data scientist" in role_lower:
+            strict_kws.extend(["data scientist", "data science"])
+            
+        if strict_kws:
+            if any(k in title for k in strict_kws):
+                best_score = max(best_score, 0.9)
+            elif any(k in desc for k in strict_kws):
+                best_score = max(best_score, 0.6)
+                
+        # Generic word match (needs ALL words to match for high score)
         if role_words:
             title_hits = sum(1 for w in role_words if w in title)
-            if title_hits >= len(role_words) * 0.5:
-                best_score = max(best_score, 0.8)
-            # Role keywords in description (weaker signal)
+            if title_hits == len(role_words):
+                best_score = max(best_score, 0.9)
+            elif title_hits >= len(role_words) * 0.5:
+                best_score = max(best_score, 0.6) # Lowered from 0.8 to heavily penalise partial matches like Software Engineer
+                
             desc_hits = sum(1 for w in role_words if w in desc)
-            if desc_hits >= len(role_words) * 0.5:
-                best_score = max(best_score, 0.4)
+            if desc_hits == len(role_words):
+                best_score = max(best_score, 0.6)
+            elif desc_hits >= len(role_words) * 0.5:
+                best_score = max(best_score, 0.3)
     
     return best_score
 
