@@ -35,9 +35,10 @@ class UserPreferences:
 # ── Scoring weights ───────────────────────────────────────────────────────────
 
 WEIGHTS = {
-    "embedding":  0.40,
-    "skill":      0.30,
-    "location":   0.15,
+    "embedding":  0.25,
+    "skill":      0.25,
+    "role_match": 0.25,
+    "location":   0.10,
     "feedback":   0.15,
 }
 
@@ -157,6 +158,7 @@ def _stage3_rerank(
         return df
 
     skill_scores    = df.apply(lambda r: _skill_score(r, prefs.skills), axis=1)
+    role_scores     = df.apply(lambda r: _role_match_score(r, prefs.target_roles), axis=1)
     location_scores = df.apply(lambda r: _location_score(r, prefs), axis=1)
     
     # Base explicit feedback (exact job ID match)
@@ -202,13 +204,15 @@ def _stage3_rerank(
 
     df = df.copy()
     df["skill_score"]    = skill_scores.round(4)
+    df["role_score"]     = role_scores.round(4)
     df["location_score"] = location_scores.round(4)
     df["feedback_score"] = fb_norm.round(4)
     df["final_score"]    = (
-        WEIGHTS["embedding"]  * emb        +
-        WEIGHTS["skill"]      * skill_scores +
-        WEIGHTS["location"]   * location_scores +
-        WEIGHTS["feedback"]   * fb_norm
+        WEIGHTS["embedding"]   * emb            +
+        WEIGHTS["skill"]       * skill_scores   +
+        WEIGHTS["role_match"]  * role_scores    +
+        WEIGHTS["location"]    * location_scores +
+        WEIGHTS["feedback"]    * fb_norm
     ).round(4)
 
     df["match_pct"] = (df["final_score"] * 100).clip(0, 100).astype(int)
@@ -217,6 +221,36 @@ def _stage3_rerank(
 
 
 # ── Scoring helpers ───────────────────────────────────────────────────────────
+
+def _role_match_score(row: pd.Series, target_roles: List[str]) -> float:
+    """
+    Score how well the job title matches the user's desired roles.
+    This is critical for career pivoters — without it, a 'Data Analyst'
+    who wants 'ML Engineer' would see DA jobs ranked equally to ML jobs.
+    """
+    if not target_roles:
+        return 0.5
+    title = str(row.get("title", "")).lower()
+    desc  = str(row.get("description", "")).lower()[:500]
+    
+    best_score = 0.0
+    for role in target_roles:
+        role_lower = role.lower()
+        # Exact title match → full score
+        if role_lower in title:
+            best_score = max(best_score, 1.0)
+        # Partial match: individual keywords from role appear in title
+        role_words = [w for w in role_lower.split() if len(w) > 2]
+        if role_words:
+            title_hits = sum(1 for w in role_words if w in title)
+            if title_hits >= len(role_words) * 0.5:
+                best_score = max(best_score, 0.8)
+            # Role keywords in description (weaker signal)
+            desc_hits = sum(1 for w in role_words if w in desc)
+            if desc_hits >= len(role_words) * 0.5:
+                best_score = max(best_score, 0.4)
+    
+    return best_score
 
 def _skill_score(row: pd.Series, user_skills: List[str]) -> float:
     if not user_skills:
@@ -281,9 +315,9 @@ def explain_ranking(row: pd.Series, prefs: UserPreferences) -> str:
         f"**Overall Match Score: {row.get('match_pct', 0)}%**",
         "",
         "### Score Breakdown",
-        f"- 🔍 **Embedding Similarity** (Lecture 5): `{row.get('embedding_score', 0):.2f}` × 40%",
+        f"- 🔍 **Embedding Similarity** (Lecture 5): `{row.get('embedding_score', 0):.2f}` × 25%",
         f"  > Your profile semantically aligns with this role.",
-        f"- 🛠 **Skill Overlap** (Lecture 7): `{row.get('skill_score', 0):.2f}` × 30%",
+        f"- 🛠 **Skill Overlap** (Lecture 7): `{row.get('skill_score', 0):.2f}` × 25%",
     ]
 
     # Show matched skills
@@ -297,7 +331,9 @@ def explain_ranking(row: pd.Series, prefs: UserPreferences) -> str:
             lines.append(f"  > ❌ Not found: {', '.join(missing[:4])}")
 
     lines += [
-        f"- 📍 **Location Match**: `{row.get('location_score', 0):.2f}` × 15%",
+        f"- 🎯 **Role Match**: `{row.get('role_score', 0):.2f}` × 25%",
+        f"  > How well the job title matches your target roles: {', '.join(prefs.target_roles[:3]) if prefs.target_roles else 'Any'}",
+        f"- 📍 **Location Match**: `{row.get('location_score', 0):.2f}` × 10%",
         f"  > Job location: {row.get('location', 'N/A')} | Your pref: {prefs.location or 'Any'}",
         f"- 🔄 **Adaptive Feedback**: `{row.get('feedback_score', 0.5):.2f}` × 15%",
         f"  > Based on your accept/reject history this session.",

@@ -38,11 +38,12 @@ While dense embeddings are excellent for semantic recall, they are mathematicall
 * **Technique Choice**: We implemented a strict Multi-Stage Funnel to combine the best of both worlds:
   1. **L1 (Candidate Generation)**: FAISS retrieves the top 200 semantic matches.
   2. **L2 (Hard Filtering)**: Deterministic boolean logic iterates over the L1 pool and eradicates any jobs that violate the user's explicit parameters (Location mismatches, lack of Visa Status sponsorship, Salary below threshold).
-  3. **L3 (Weighted Re-Ranking)**: The surviving jobs are re-scored using a composite formula that balances semantic depth, skill matching, location, and adaptive feedback:
+  3. **L3 (Weighted Re-Ranking)**: The surviving jobs are re-scored using a composite formula that balances semantic depth, skill matching, role alignment, location, and adaptive feedback:
      ```text
-     Final Score = (0.40 * FAISS Semantic Distance Score) 
-                 + (0.30 * Explicit Skill Overlap Percentage) 
-                 + (0.15 * Location Match Bonus)
+     Final Score = (0.25 * FAISS Semantic Distance Score) 
+                 + (0.25 * Explicit Skill Overlap Percentage) 
+                 + (0.25 * Target Role Title Match)
+                 + (0.10 * Location Match Bonus)
                  + (0.15 * Adaptive Feedback Score)
      ```
 
