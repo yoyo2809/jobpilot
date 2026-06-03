@@ -334,7 +334,8 @@ with tab_match:
         st.warning("No jobs matched your profile. Try relaxing your dealbreakers.")
     else:
         n_shown = len(ranked)
-        st.markdown(f"### Top {n_shown} Matches for **{st.session_state.profile.get('name','You')}**")
+        user_name = st.session_state.profile.get('name','You') if st.session_state.profile else 'You'
+        st.markdown(f"### Top {n_shown} Matches for **{user_name}**")
         st.caption(
             "Pipeline: FAISS Embedding Retrieval (Lecture 5) → "
             "Hard Filter → Weighted Re-ranking (Lecture 7) → Adaptive Feedback"
@@ -423,8 +424,14 @@ with tab_match:
                     gen_key = f"gen_{job_id}_{idx}"
                     if st.button("📝 Generate Resume", key=gen_key):
                         with st.spinner("Generating tailored resume with Gemini …"):
+                            actual_profile = st.session_state.profile if st.session_state.profile else {
+                                'name': 'Candidate',
+                                'raw_text': st.session_state.prefs.background if st.session_state.prefs else '',
+                                'skills': st.session_state.prefs.skills if st.session_state.prefs else [],
+                                'target_roles': st.session_state.prefs.target_roles if st.session_state.prefs else [],
+                            }
                             resume_md = resume_gen.generate_resume(
-                                st.session_state.profile,
+                                actual_profile,
                                 row.to_dict(),
                             )
                         st.session_state[f"resume_{job_id}"] = resume_md
