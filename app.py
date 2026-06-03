@@ -154,8 +154,13 @@ with st.sidebar:
     if st.session_state.profile:
         p = st.session_state.profile
         st.success(f"✅ Profile loaded: **{p.get('name','User')}**")
+        
+        if p.get("target_roles"):
+            st.markdown("**🎯 Target Roles:**")
+            st.markdown(" ".join(f"`{r}`" for r in p["target_roles"][:5]))
+            
         if p.get("skills"):
-            st.markdown("**Skills detected:**")
+            st.markdown("**🛠 Skills detected:**")
             st.markdown(" ".join(f"`{s}`" for s in p["skills"][:12]))
 
     st.divider()
