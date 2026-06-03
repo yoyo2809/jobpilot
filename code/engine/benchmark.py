@@ -99,6 +99,7 @@ PERSONA_QUERIES = {
         "skills": ["Python", "C++", "PyTorch", "NLP", "Computer Vision"],
         "dealbreakers": ["Contract", "1099", "Temporary"],
         "location": "United States",
+        "visa_required": True,
     },
 }
 
@@ -122,6 +123,7 @@ def run_benchmark(
             location     = cfg["location"],
             skills       = cfg["skills"],
             dealbreakers = cfg["dealbreakers"],
+            visa_required = cfg.get("visa_required", False),
         )
 
         # Baseline: BM25

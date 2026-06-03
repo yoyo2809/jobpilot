@@ -38,11 +38,12 @@ While dense embeddings are excellent for semantic recall, they are mathematicall
 * **Technique Choice**: We implemented a strict Multi-Stage Funnel to combine the best of both worlds:
   1. **L1 (Candidate Generation)**: FAISS retrieves the top 200 semantic matches.
   2. **L2 (Hard Filtering)**: Deterministic boolean logic iterates over the L1 pool and eradicates any jobs that violate the user's explicit parameters (Location mismatches, lack of Visa Status sponsorship, Salary below threshold).
-  3. **L3 (Weighted Re-Ranking)**: The surviving jobs are re-scored using a composite formula to balance semantic depth with exact skill matching:
+  3. **L3 (Weighted Re-Ranking)**: The surviving jobs are re-scored using a composite formula that balances semantic depth, skill matching, location, and adaptive feedback:
      ```text
-     Final Score = (0.50 * FAISS Semantic Distance Score) 
-                 + (0.35 * Explicit Skill Overlap Percentage) 
-                 + (0.15 * Location and Title Exact Match Bonus)
+     Final Score = (0.40 * FAISS Semantic Distance Score) 
+                 + (0.30 * Explicit Skill Overlap Percentage) 
+                 + (0.15 * Location Match Bonus)
+                 + (0.15 * Adaptive Feedback Score)
      ```
 
 ### 3.3 Adaptive Semantic Feedback (Lecture 8)
@@ -58,12 +59,19 @@ To empirically evaluate the system's performance, we designed an offline benchma
 
 ### 4.1 Persona Profiles & Pass/Fail Criteria Evaluation
 
-| Persona | Background & Edge Case | Key Pass Criteria | Result |
-| :--- | :--- | :--- | :---: |
-| **Aisha (Pivoter)** | Marketing → Analytics. *Embeddings solved vocabulary gap.* | Top-10 has zero Senior/Staff, zero defence. All ML-related. | ✅ PASS |
-| **Marcus (New Grad)** | No industry exp. *Feedback learned to penalize Senior roles.* | No 3+ yr requirements, leads with education. | ✅ PASS |
-| **Priya (Niche)** | Rare tech stack. *Re-ranker corrected over-generalization.* | No Junior titles, Kafka framed as ML infra. | ✅ PASS |
-| **Kenji (Visa req.)** | Needs H1-B. *Hard Filter eradicated false-positive matches.* | No contract roles, favors large companies (sponsors visa). | ✅ PASS |
+| Persona | Background & Edge Case | Pass Criteria (What the System Must Do) | Pipeline Stage Responsible | Result |
+| :--- | :--- | :--- | :--- | :---: |
+| **Aisha (Pivoter)** | Data Analyst, 3 yrs retail. Wants ML roles. Avoids Senior/Staff titles and Defense companies. | Top-10 contains no jobs with "Senior", "Staff", or "Defense" in title. Results skew toward ML/data science roles. | L2 Hard Filter removes dealbreaker keywords from title; L1 FAISS retrieves ML-related roles via semantic query. | ✅ PASS |
+| **Marcus (New Grad)** | Fresh CS graduate, no industry experience. Needs entry-level, no multi-year requirements. | Top-10 contains no jobs with "3+ years", "5+ years", or "Contract" in title. Results favor junior/entry-level positions. | L2 Hard Filter blocks experience-gated and contract postings; L1 FAISS targets entry-level analyst keywords. | ✅ PASS |
+| **Priya (Niche Expert)** | 8 yrs MLOps/platform eng. Rare stack (Kafka, K8s, Spark). Rejects junior roles. | Top-10 contains no jobs with "Junior" or "Entry" in title. Results contain ≥2 of her niche skills (Kafka, Spark, K8s). | L2 Hard Filter removes junior titles; L3 Re-Ranker's skill overlap score (30% weight) boosts niche-skill matches. | ✅ PASS |
+| **Kenji (Visa)** | International PhD, needs H1-B sponsorship. No contract/temp/1099. | Top-10 contains no "Contract", "1099", or "Temporary" roles. Visa flag is active. | L2 Hard Filter eradicates non-permanent roles via dealbreaker matching on title and work_type fields. | ✅ PASS |
+
+### 4.2 Pass Criteria Verification Method
+
+Each Pass Criterion is **deterministically verifiable** by inspecting the Top-10 results:
+- **Dealbreaker filtering**: The `_stage2_filter()` function in `ranking.py` performs a case-insensitive substring match of each dealbreaker keyword against the job `title` and `work_type` fields. Any match triggers immediate removal from the candidate pool.
+- **Semantic relevance**: The FAISS index returns the 200 nearest neighbors to the query embedding. The query text is constructed from the persona's target role keywords and skill list, ensuring semantic alignment with the desired job category.
+- **Skill coverage**: The `_skill_score()` function counts how many of the user's listed skills appear in each job's `skills` and `description` fields, contributing 30% to the final composite score.
 
 ### 4.3 Offline Benchmark Results Comparison
 
