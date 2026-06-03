@@ -21,6 +21,7 @@ Rules:
 - List top 6-8 relevant skills first.
 - Use strong action verbs and quantify achievements where possible.
 - Do NOT invent qualifications the candidate doesn't have.
+- Omit irrelevant or basic skills (e.g., Excel, reporting) if the target role is advanced (e.g., ML/Data Science).
 - Format with proper Markdown headers (# for name, ## for sections).
 
 Candidate Profile:
