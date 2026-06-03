@@ -177,7 +177,7 @@ with st.sidebar:
 
     dealbreaker_options = [
         "Junior", "Entry", "Entry Level", "Internship",
-        "Contract", "1099", "Temporary",
+        "Contract", "1099", "Temporary", "Unpaid",
         "Senior", "Staff", "Principal", "Director", "VP",
         "3+ years", "5+ years", "7+ years", "10+ years",
         "Defense", "Military"
