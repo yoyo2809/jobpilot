@@ -158,10 +158,7 @@ def _stage2_filter(
         any(db_kw.lower() in ("3+ years", "5+ years") for db_kw in prefs.dealbreakers)
     )
     company_size_mode = "100" in background and "employee" in background
-    ml_target_mode = any(term in target_text for term in (
-        "machine learning", "ml engineer", "applied scientist",
-        "research scientist", "ai engineer", "data scientist"
-    ))
+    ml_target_mode = _is_ml_target_mode(prefs)
 
     for _, row in df.iterrows():
         job_id  = str(row["id"])
@@ -222,6 +219,10 @@ def _stage2_filter(
                 removed[job_id] = "Contract/temp/unpaid role"
                 blocked = True
 
+        if not blocked and any(term in full_text for term in AI_ANNOTATION_TERMS):
+            removed[job_id] = "AI annotation/training gig, not a target full-time role"
+            blocked = True
+
         if blocked:
             continue
 
@@ -234,7 +235,7 @@ def _stage2_filter(
         # Positive role relevance filter: if target roles are set,
         # require a real role-level match, not just a generic word like "engineer".
         if prefs.target_roles:
-            if not _has_target_role_relevance(row, prefs.target_roles):
+            if not _has_target_role_relevance(row, prefs.target_roles, require_ml_data_science=ml_target_mode):
                 removed[job_id] = "No relevance to target roles"
                 continue
 
@@ -400,7 +401,28 @@ def _role_match_score(row: pd.Series, target_roles: List[str]) -> float:
     return best_score
 
 
-def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
+def _is_ml_target_mode(prefs: UserPreferences) -> bool:
+    """Only explicit ML/AI career goals should trigger Aisha-style ML filtering."""
+    target_text = " ".join(prefs.target_roles).lower()
+    background = (prefs.background or "").lower()
+    explicit_terms = [
+        "machine learning", "ml engineer", "ai engineer", "applied scientist",
+        "research scientist", "mlops", "deep learning", "nlp engineer",
+        "computer vision", "generative ai", "llm",
+    ]
+    if any(term in target_text for term in explicit_terms):
+        return True
+    return any(phrase in background for phrase in [
+        "pivot to ml", "pivoting to ml", "ml engineering",
+        "machine learning engineering", "wants to pivot to ml",
+    ])
+
+
+def _has_target_role_relevance(
+    row: pd.Series,
+    target_roles: List[str],
+    require_ml_data_science: bool = False,
+) -> bool:
     """Strict positive role filter used before final scoring."""
     title = str(row.get("title", "")).lower()
     desc = str(row.get("description", "")).lower()[:1000]
@@ -410,7 +432,8 @@ def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
         role_lower = role.lower().strip()
         if not role_lower:
             continue
-        if role_lower in text and "data scientist" not in role_lower:
+        title_sensitive_roles = ("data scientist", "data analyst", "business intelligence", "bi analyst")
+        if role_lower in text and not any(term in role_lower for term in title_sensitive_roles):
             return True
 
         if role_lower in ("ml engineer", "machine learning engineer"):
@@ -425,8 +448,21 @@ def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
         elif "research scientist" in role_lower:
             if "research scientist" in text or ("scientist" in title and _has_ml_signal(text)):
                 return True
+        elif "data analyst" in role_lower:
+            analyst_title = "analyst" in title and any(term in title for term in [
+                "data", "analytics", "business intelligence"
+            ])
+            if "data analyst" in title or analyst_title:
+                return True
+        elif "business intelligence" in role_lower or "bi analyst" in role_lower:
+            if any(term in title for term in [
+                "business intelligence", "bi analyst", "bi developer",
+                "business intelligence developer", "business intelligence analyst"
+            ]):
+                return True
         elif "data scientist" in role_lower:
-            if ("data scientist" in text or ("data science" in text and "scientist" in title)) and _has_ml_signal(text):
+            has_ds_title = "data scientist" in text or ("data science" in text and "scientist" in title)
+            if has_ds_title and (not require_ml_data_science or _has_ml_signal(text)):
                 return True
         elif "mlops" in role_lower or "platform engineer" in role_lower:
             infra_terms = ["mlops", "platform", "kubernetes", "kafka", "spark", "ml infrastructure", "machine learning platform"]
@@ -434,9 +470,6 @@ def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
                 return True
         elif "analytics engineer" in role_lower:
             if "analytics engineer" in text or ("analytics" in title and "engineer" in title):
-                return True
-        elif "business intelligence" in role_lower or "bi analyst" in role_lower:
-            if "business intelligence" in text or "bi analyst" in text:
                 return True
         else:
             words = [w for w in re.split(r"\W+", role_lower) if len(w) > 2]
@@ -585,14 +618,10 @@ def _to_float(val) -> Optional[float]:
 def describe_pass_criteria(prefs: UserPreferences) -> List[str]:
     """Human-readable pass criteria inferred from the active persona inputs."""
     criteria: List[str] = []
-    target_text = " ".join(prefs.target_roles).lower()
     background = (prefs.background or "").lower()
     dealbreakers = [d.lower() for d in prefs.dealbreakers]
 
-    ml_mode = any(term in target_text for term in (
-        "machine learning", "ml engineer", "ai engineer",
-        "applied scientist", "research scientist", "data scientist"
-    ))
+    ml_mode = _is_ml_target_mode(prefs)
     if ml_mode:
         criteria.append("Top-10 jobs must be visibly ML/AI-related from the title.")
         criteria.append("Resume must highlight Python/ML/modeling skills, not Excel/reporting.")
@@ -625,11 +654,7 @@ def evaluate_pass_criteria(row: pd.Series, prefs: UserPreferences) -> List[tuple
     text = f"{title} {company} {exp_lvl} {work_t} {desc}"
     checks: List[tuple[str, bool]] = []
 
-    target_text = " ".join(prefs.target_roles).lower()
-    ml_mode = any(term in target_text for term in (
-        "machine learning", "ml engineer", "ai engineer",
-        "applied scientist", "research scientist", "data scientist"
-    ))
+    ml_mode = _is_ml_target_mode(prefs)
     if ml_mode:
         checks.append(("ML/AI-focused title", _has_ml_focused_role(row, prefs.target_roles)))
 

@@ -108,6 +108,8 @@ if "ranked_jobs" not in st.session_state:
     st.session_state.ranked_jobs = None
 if "prefs" not in st.session_state:
     st.session_state.prefs = None
+if "prefs_signature" not in st.session_state:
+    st.session_state.prefs_signature = None
 
 
 # ── Load engine (cached across reruns) ───────────────────────────────────────
@@ -219,12 +221,26 @@ with st.sidebar:
         background    = combined_background,
         location      = location,
         min_salary    = float(min_salary),
-        skills        = list(set(extracted_skills)),
-        target_roles  = list(set(extracted_roles)),
+        skills        = sorted(set(extracted_skills)),
+        target_roles  = sorted(set(extracted_roles)),
         dealbreakers  = dealbreakers,
         remote_ok     = remote_ok,
         visa_required = visa_req,
     )
+
+    prefs_signature = (
+        prefs.background,
+        prefs.location,
+        prefs.min_salary,
+        tuple(prefs.skills),
+        tuple(prefs.target_roles),
+        tuple(prefs.dealbreakers),
+        prefs.remote_ok,
+        prefs.visa_required,
+    )
+    if st.session_state.prefs_signature != prefs_signature:
+        st.session_state.ranked_jobs = None
+        st.session_state.prefs_signature = prefs_signature
     st.session_state.prefs = prefs
 
     if st.button("🔍 Find Matches", type="primary", use_container_width=True):

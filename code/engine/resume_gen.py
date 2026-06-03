@@ -96,7 +96,8 @@ def _format_pass_criteria(profile: dict) -> str:
 
     ml_mode = any(term in target_roles for term in [
         "ml engineer", "machine learning", "ai engineer",
-        "applied scientist", "research scientist", "data scientist",
+        "applied scientist", "research scientist", "mlops",
+        "deep learning", "nlp engineer", "computer vision",
     ])
     if ml_mode:
         criteria.append("- Resume highlights Python/ML/modeling/scikit-learn experience first.")
