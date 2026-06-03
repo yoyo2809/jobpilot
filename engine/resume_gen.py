@@ -39,7 +39,7 @@ Write the complete tailored resume now:"""
 def _get_gemini():
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-pro")
+    return genai.GenerativeModel("gemini-flash-latest")
 
 
 def generate_resume(profile: dict, job: dict) -> str:

@@ -30,7 +30,7 @@ def _get_gemini():
     if not api_key:
         raise ValueError("GEMINI_API_KEY not set in .streamlit/secrets.toml")
     genai.configure(api_key=api_key)
-    return genai.GenerativeModel("gemini-pro")
+    return genai.GenerativeModel("gemini-flash-latest")
 
 
 # ── Text extraction ───────────────────────────────────────────────────────────
