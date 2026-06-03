@@ -104,6 +104,7 @@ def _stage2_filter(
 ) -> tuple[pd.DataFrame, Dict[str, str]]:
     """
     Remove jobs that violate hard dealbreakers.
+    Checks title, company, work_type, AND description fields.
     Returns (filtered_df, {job_id: reason}).
     """
     removed: Dict[str, str] = {}
@@ -112,14 +113,15 @@ def _stage2_filter(
     for _, row in df.iterrows():
         job_id  = str(row["id"])
         title   = str(row.get("title", "")).lower()
-        desc    = str(row.get("description", "")).lower()
+        company = str(row.get("company", "")).lower()
+        desc    = str(row.get("description", "")).lower()[:800]
         work_t  = str(row.get("work_type", "")).lower()
 
-        # Check each dealbreaker
+        # Check each dealbreaker against ALL relevant text fields
         blocked = False
         for db_kw in prefs.dealbreakers:
             pattern = db_kw.lower()
-            if pattern in title or pattern in work_t:
+            if pattern in title or pattern in work_t or pattern in company or pattern in desc:
                 removed[job_id] = f'Contains dealbreaker keyword: "{db_kw}"'
                 blocked = True
                 break
