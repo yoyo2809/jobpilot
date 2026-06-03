@@ -62,7 +62,16 @@ To empirically evaluate the system's performance, we designed an offline benchma
 3. **Priya (Experienced Niche)**: Priya is highly specialized in a rare, legacy tech stack. *Edge Case Handled: The L3 Multi-Stage logic (specifically the 35% Skill Overlap weight) corrected the embedding model's tendency to over-generalize her niche skills.*
 4. **Kenji (International Visa)**: Kenji requires immediate H1-B visa sponsorship. Non-sponsoring companies are absolute dealbreakers regardless of how perfectly the skills match. *Edge Case Handled: The L2 Hard Filter reliably eradicated all false-positive matches that the FAISS index initially returned.*
 
-### 4.2 Offline Benchmark Results Comparison
+### 4.2 Persona Pass/Fail Criteria Evaluation
+
+| Persona | Key Pass Criteria | Result | Implementation Notes |
+| :--- | :--- | :---: | :--- |
+| **Aisha (Pivoter)** | Top-10 has zero Senior/Staff roles, zero defence companies. All ML-related. | ✅ PASS | L2 Hard filters successfully parsed and blocked Senior/Staff and defence industry flags. |
+| **Marcus (New Grad)** | No 3+ yr requirements, leads with education. | ✅ PASS | Adaptive Feedback learned to penalize mid/senior roles after initial explicit rejections. |
+| **Priya (Niche)** | No Junior titles, Kafka framed as ML infra. | ✅ PASS | L3 Multi-Stage Re-ranker heavily weighted her exact niche technical stack. |
+| **Kenji (Visa req.)** | No contract roles, favors large companies (sponsors visa). | ✅ PASS | Strict boolean L2 filter eradicated all non-sponsoring employers prior to re-ranking. |
+
+### 4.3 Offline Benchmark Results Comparison
 
 | Persona | Baseline (BM25) | Embedding Only (L5) | Multi-Stage Re-Ranking (L7) |
 | :--- | :---: | :---: | :---: |
@@ -73,7 +82,7 @@ To empirically evaluate the system's performance, we designed an offline benchma
 
 *Analysis Note: Observe how Priya's embedding-only score dropped slightly below the BM25 baseline. This is a known phenomenon where dense vectors over-generalize rare keywords. Our implementation of the Multi-Stage L7 pipeline successfully mitigated this regression.*
 
-### 4.3 Real-Time Online Evaluation Metrics
+### 4.4 Real-Time Online Evaluation Metrics
 Beyond offline benchmarks, the Streamlit UI features a live analytics dashboard that calculates real-time **User Precision (Hit Rate)** and **Top-10 Skill Coverage (Recall)** directly driven by the user's session interactions. This provides a transparent view of the Adaptive Feedback system's effectiveness.
 
 ---
