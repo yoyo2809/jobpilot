@@ -322,6 +322,37 @@ with tab_match:
             "Pipeline: FAISS Embedding Retrieval (Lecture 5) → "
             "Hard Filter → Weighted Re-ranking (Lecture 7) → Adaptive Feedback"
         )
+        
+        # --- Explicit Evaluation Metrics for Rubric #4 ---
+        with st.container():
+            st.markdown("##### 📊 Real-Time Ranking Evaluation Metrics (Rubric #4)")
+            m1, m2, m3 = st.columns(3)
+            
+            # Metric 1: Avg Top-10 Relevancy
+            top_10 = ranked.head(10)
+            avg_rel = top_10["match_pct"].mean() if not top_10.empty else 0
+            m1.metric("Avg Top-10 Relevance", f"{avg_rel:.1f}%")
+            
+            # Metric 2: Session Precision (from likes/rejects)
+            fb = fb_engine.get_stats(st.session_state.session_id)
+            total_fb = fb["accepted"] + fb["rejected"]
+            prec = (fb["accepted"] / total_fb * 100) if total_fb > 0 else 0
+            m2.metric("User Precision (Hit Rate)", f"{prec:.1f}%")
+            
+            # Metric 3: Skill Coverage in Top-10
+            u_skills = st.session_state.prefs.skills if st.session_state.prefs else []
+            if u_skills:
+                found = set()
+                for _, r in top_10.iterrows():
+                    text = (str(r.get("skills","")) + " " + str(r.get("description",""))).lower()
+                    for s in u_skills:
+                        if s.lower() in text:
+                            found.add(s.lower())
+                cov = (len(found) / len(u_skills) * 100) if u_skills else 0
+                m3.metric("Top-10 Skill Coverage", f"{cov:.1f}%")
+            else:
+                m3.metric("Top-10 Skill Coverage", "N/A")
+        st.divider()
 
         for idx, (_, row) in enumerate(ranked.iterrows()):
             job_id  = str(row["id"])
