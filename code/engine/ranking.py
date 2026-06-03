@@ -105,11 +105,26 @@ def _stage2_filter(
 ) -> tuple[pd.DataFrame, Dict[str, str]]:
     """
     Remove jobs that violate hard dealbreakers.
-    Checks title, company, work_type, AND description fields.
+    Checks title, company, work_type, experience_level, AND description.
+    Also enforces positive role relevance if target_roles are specified.
     Returns (filtered_df, {job_id: reason}).
     """
     removed: Dict[str, str] = {}
     keep = []
+
+    # Build a set of target role keywords for positive filtering
+    role_keywords = set()
+    for role in prefs.target_roles:
+        for word in role.lower().split():
+            if len(word) > 2:  # skip short words like "ML"
+                role_keywords.add(word)
+        # Also add the full role as-is for exact matching
+        role_keywords.add(role.lower())
+    # Add 2-letter important abbreviations back
+    for role in prefs.target_roles:
+        for word in role.lower().split():
+            if word in ("ml", "ai", "ds", "de", "qa"):
+                role_keywords.add(word)
 
     for _, row in df.iterrows():
         job_id  = str(row["id"])
@@ -117,12 +132,17 @@ def _stage2_filter(
         company = str(row.get("company", "")).lower()
         desc    = str(row.get("description", "")).lower()[:800]
         work_t  = str(row.get("work_type", "")).lower()
+        exp_lvl = str(row.get("experience_level", "")).lower()
+        skills_t = str(row.get("skills", "")).lower()
 
-        # Check each dealbreaker against ALL relevant text fields
+        # Combine all text for dealbreaker matching
+        all_text = f"{title} {company} {work_t} {exp_lvl} {desc} {skills_t}"
+
+        # Check each dealbreaker against ALL text fields
         blocked = False
         for db_kw in prefs.dealbreakers:
             pattern = db_kw.lower()
-            if pattern in title or pattern in work_t or pattern in company or pattern in desc:
+            if pattern in all_text:
                 removed[job_id] = f'Contains dealbreaker keyword: "{db_kw}"'
                 blocked = True
                 break
@@ -135,6 +155,15 @@ def _stage2_filter(
         if prefs.min_salary > 0 and sal_max and sal_max < prefs.min_salary * 0.7:
             removed[job_id] = f"Salary below threshold (${sal_max:,.0f} < ${prefs.min_salary*0.7:,.0f})"
             continue
+
+        # Positive role relevance filter: if target roles are set,
+        # require at least one keyword match in title or description
+        if role_keywords:
+            title_and_desc = f"{title} {desc}"
+            has_role_relevance = any(kw in title_and_desc for kw in role_keywords)
+            if not has_role_relevance:
+                removed[job_id] = "No relevance to target roles"
+                continue
 
         keep.append(row)
 
