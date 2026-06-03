@@ -191,7 +191,7 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
 
     if "Aisha" in persona:
         blocked = ["senior", "staff", "defense", "defence", "military"]
-        ml_terms = ["machine learning", " ml", "ml ", "applied scientist", "data scientist", "artificial intelligence", "deep learning", "pytorch"]
+        ml_terms = ["machine learning", " ml ", "applied scientist", "artificial intelligence", "deep learning", "pytorch", "tensorflow", "nlp", "computer vision"]
         return (not has_any(blocked) and all(any(term in t for term in ml_terms) for t in text.tolist()),
                 "No senior/staff/defense; every Top-10 row has an ML/AI/data-science signal")
 

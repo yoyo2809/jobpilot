@@ -64,10 +64,10 @@ KNOWN_H1B_SPONSOR_TERMS = [
 ]
 
 ML_RELATED_TERMS = [
-    "machine learning", "ml ", " ml", "ml engineer", "applied scientist",
-    "data scientist", "data science", "ai ", " ai", "artificial intelligence",
-    "deep learning", "nlp", "computer vision", "research scientist",
-    "modeling", "predictive model", "pytorch", "tensorflow",
+    "machine learning", "ml engineer", "applied scientist",
+    "artificial intelligence", "deep learning", "nlp", "computer vision",
+    "research scientist", "predictive model", "pytorch", "tensorflow",
+    "neural network", "model training", "model deployment", "mlops",
 ]
 
 EXPERIENCE_RE = re.compile(
@@ -230,7 +230,7 @@ def _stage2_filter(
 
         # Career-pivot ML personas should not get generic SWE/analytics roles
         # unless the posting itself has clear ML/AI/data-science signals.
-        if ml_target_mode and not any(term in full_text for term in ML_RELATED_TERMS):
+        if ml_target_mode and not _has_ml_signal(full_text):
             removed[job_id] = "No ML/AI signal for ML-focused target role"
             continue
 
@@ -400,23 +400,23 @@ def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
         role_lower = role.lower().strip()
         if not role_lower:
             continue
-        if role_lower in text:
+        if role_lower in text and "data scientist" not in role_lower:
             return True
 
         if role_lower in ("ml engineer", "machine learning engineer"):
-            if ("machine learning" in text or re.search(r"\bml\b", text)) and "engineer" in text:
+            if _has_ml_signal(text) and "engineer" in text:
                 return True
         elif role_lower in ("ai engineer",):
-            if ("artificial intelligence" in text or re.search(r"\bai\b", text)) and "engineer" in text:
+            if _has_ml_signal(text) and "engineer" in text:
                 return True
         elif "applied scientist" in role_lower:
-            if "applied scientist" in text or ("scientist" in title and any(t in text for t in ML_RELATED_TERMS)):
+            if "applied scientist" in text or ("scientist" in title and _has_ml_signal(text)):
                 return True
         elif "research scientist" in role_lower:
-            if "research scientist" in text or ("scientist" in title and any(t in text for t in ML_RELATED_TERMS)):
+            if "research scientist" in text or ("scientist" in title and _has_ml_signal(text)):
                 return True
         elif "data scientist" in role_lower:
-            if "data scientist" in text or ("data science" in text and "scientist" in title):
+            if ("data scientist" in text or ("data science" in text and "scientist" in title)) and _has_ml_signal(text):
                 return True
         elif "mlops" in role_lower or "platform engineer" in role_lower:
             infra_terms = ["mlops", "platform", "kubernetes", "kafka", "spark", "ml infrastructure", "machine learning platform"]
@@ -434,6 +434,20 @@ def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
                 return True
 
     return False
+
+
+def _has_ml_signal(text: str) -> bool:
+    """Return True only for explicit ML/AI signals, not generic data roles."""
+    lowered = text.lower()
+    phrase_terms = [
+        "machine learning", "artificial intelligence", "deep learning",
+        "computer vision", "predictive model", "pytorch", "tensorflow",
+        "neural network", "model training", "model deployment", "mlops",
+        "large language model", "llm", "natural language processing",
+    ]
+    if any(term in lowered for term in phrase_terms):
+        return True
+    return bool(re.search(r"\b(ml|ai|nlp)\b", lowered))
 
 def _skill_score(row: pd.Series, user_skills: List[str]) -> float:
     if not user_skills:
