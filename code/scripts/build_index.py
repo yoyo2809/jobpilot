@@ -19,14 +19,40 @@ from engine import database as db
 from engine.embeddings import EmbeddingEngine
 
 CSV_PATH = Path(__file__).parent.parent.parent / "data" / "jobs_snapshot.csv"
+CSV_ZIP_PATH = Path(__file__).parent.parent.parent / "data" / "jobs_snapshot.zip"
+
+
+def ensure_readable_csv() -> bool:
+    """Use the zipped snapshot if the plain CSV is missing or corrupted."""
+    import zipfile
+    import pandas as pd
+
+    if CSV_PATH.exists():
+        try:
+            pd.read_csv(CSV_PATH, nrows=5)
+            return True
+        except Exception as exc:
+            print(f"⚠️  Existing CSV is not readable: {exc}")
+
+    if CSV_ZIP_PATH.exists():
+        print(f"Extracting readable snapshot from {CSV_ZIP_PATH} ...")
+        with zipfile.ZipFile(CSV_ZIP_PATH, "r") as zf:
+            members = [m for m in zf.namelist() if m.endswith(".csv")]
+            if not members:
+                return False
+            CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(members[0]) as src, open(CSV_PATH, "wb") as dst:
+                dst.write(src.read())
+        return True
+    return False
 
 
 def main():
     # 1. Load CSV into SQLite
-    if CSV_PATH.exists():
+    if ensure_readable_csv():
         print(f"Loading {CSV_PATH} into SQLite ...")
         db.initialize_db()
-        db.load_csv_to_db(str(CSV_PATH))
+        db.load_csv_to_db(str(CSV_PATH), replace=True)
     else:
         print(f"⚠️  {CSV_PATH} not found. Run scripts/download_data.py first.")
         if db.get_job_count() == 0:

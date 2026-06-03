@@ -222,7 +222,7 @@ def get_analytics_data() -> pd.DataFrame:
     return df
 
 
-def load_csv_to_db(csv_path: str):
+def load_csv_to_db(csv_path: str, replace: bool = True):
     """
     Load the jobs CSV snapshot into SQLite.
     Handles LinkedIn Kaggle dataset column naming.
@@ -260,6 +260,10 @@ def load_csv_to_db(csv_path: str):
     df["company"]     = df["company"].fillna("Unknown").astype(str)
 
     conn = get_connection()
-    df[needed].to_sql("jobs", conn, if_exists="replace", index=False, chunksize=2000)
+    if replace:
+        conn.execute("DELETE FROM jobs")
+        conn.execute("DELETE FROM streaming_log")
+        conn.commit()
+    df[needed].to_sql("jobs", conn, if_exists="append", index=False, chunksize=2000)
     conn.close()
     print(f"✅ Loaded {len(df):,} jobs into database.")

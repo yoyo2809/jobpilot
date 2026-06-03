@@ -223,6 +223,10 @@ with st.sidebar:
     if st.button("⬇️ Fetch New Jobs", use_container_width=True):
         with st.spinner("Fetching 750 jobs from Adzuna (this takes ~15 seconds) …"):
             stats = ingestion.manual_fetch(query=stream_query, max_pages=15)
+            if stats.get("new_job_ids") and engine.index_ready():
+                new_rows = db.get_jobs_by_ids(stats["new_job_ids"])
+                if not new_rows.empty:
+                    engine.add_jobs(new_rows)
         st.success(f"✅ Fetched {stats['fetched']} | New: {stats['new']} | Dupes: {stats['dupes']}")
         st.session_state.ranked_jobs = None   # refresh results
 

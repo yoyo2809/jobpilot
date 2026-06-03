@@ -189,7 +189,8 @@ def manual_fetch(query: str = "data scientist machine learning",
                  max_pages: int = 3) -> dict:
     """
     Synchronous fetch used when the user clicks 'Fetch New Jobs' in the UI.
-    Returns stats dict.
+    Returns stats dict, including inserted job IDs so the UI can add new
+    records to the in-memory FAISS index without a full rebuild.
     """
     all_jobs  = []
     for page in range(1, max_pages + 1):
@@ -204,4 +205,5 @@ def manual_fetch(query: str = "data scientist machine learning",
         "fetched": len(all_jobs),
         "new":     inserted,
         "dupes":   len(all_jobs) - len(new_jobs),
+        "new_job_ids": [str(j["id"]) for j in new_jobs[:inserted]],
     }

@@ -1,7 +1,7 @@
 """
 engine/profile.py
 Parse uploaded resume (PDF/DOCX) and extract structured profile
-using Gemini 1.5 Flash.
+using Gemini Flash.
 """
 import io
 import json

@@ -3,9 +3,9 @@ engine/ranking.py
 BAX-423 Lecture 7 — Ranking & Multi-Stage Recommendation Systems
 
 Multi-stage pipeline:
-  Stage 1 — Recall:    FAISS embedding retrieval (top-200)
+  Stage 1 — Recall:    FAISS embedding retrieval (top-1000)
   Stage 2 — Filter:    Hard rules (seniority, dealbreakers, salary)
-  Stage 3 — Re-rank:   Weighted score (embedding + skills + location + feedback)
+  Stage 3 — Re-rank:   Weighted score (embedding + skills + role + location + feedback)
 """
 from __future__ import annotations
 import re
@@ -47,6 +47,35 @@ SENIORITY_KEYWORDS = {
     "senior":   ["senior", "sr.", "lead", "principal", "staff", "director"],
     "mid":      ["mid", "ii", "iii", "intermediate"],
 }
+
+DEFENSE_COMPANY_TERMS = [
+    "lockheed", "raytheon", "rtx", "northrop", "boeing defense",
+    "general dynamics", "bae systems", "l3harris", "leidos", "palantir",
+    "anduril", "booz allen", "caci", "saic", "aerospace corporation",
+]
+
+KNOWN_H1B_SPONSOR_TERMS = [
+    "amazon", "google", "alphabet", "microsoft", "meta", "facebook",
+    "apple", "nvidia", "openai", "ibm", "oracle", "salesforce",
+    "adobe", "intel", "qualcomm", "servicenow", "databricks",
+    "snowflake", "uber", "lyft", "airbnb", "netflix", "tesla",
+    "bytedance", "tiktok", "linkedin", "doordash", "waymo",
+    "anthropic", "scale ai", "deepmind", "research lab", "university",
+]
+
+ML_RELATED_TERMS = [
+    "machine learning", "ml ", " ml", "ml engineer", "applied scientist",
+    "data scientist", "data science", "ai ", " ai", "artificial intelligence",
+    "deep learning", "nlp", "computer vision", "research scientist",
+    "modeling", "predictive model", "pytorch", "tensorflow",
+]
+
+EXPERIENCE_RE = re.compile(
+    r"\b(?:[3-9]|1[0-9])\s*\+?\s*(?:years?|yrs?)\b|"
+    r"\b(?:three|four|five|six|seven|eight|nine|ten)\s*\+?\s*(?:years?|yrs?)\b|"
+    r"\b[2-9]\s*[-–]\s*[3-9]\s*(?:years?|yrs?)\b",
+    re.IGNORECASE,
+)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -112,19 +141,19 @@ def _stage2_filter(
     removed: Dict[str, str] = {}
     keep = []
 
-    # Build a set of target role keywords for positive filtering
-    role_keywords = set()
-    for role in prefs.target_roles:
-        for word in role.lower().split():
-            if len(word) > 2:  # skip short words like "ML"
-                role_keywords.add(word)
-        # Also add the full role as-is for exact matching
-        role_keywords.add(role.lower())
-    # Add 2-letter important abbreviations back
-    for role in prefs.target_roles:
-        for word in role.lower().split():
-            if word in ("ml", "ai", "ds", "de", "qa"):
-                role_keywords.add(word)
+    target_text = " ".join(prefs.target_roles).lower()
+    background = (prefs.background or "").lower()
+    new_grad_mode = (
+        "new grad" in background or "recent graduate" in background or
+        "no full-time" in background or
+        any("junior" in r.lower() for r in prefs.target_roles) or
+        any(db_kw.lower() in ("3+ years", "5+ years") for db_kw in prefs.dealbreakers)
+    )
+    company_size_mode = "100" in background and "employee" in background
+    ml_target_mode = any(term in target_text for term in (
+        "machine learning", "ml engineer", "applied scientist",
+        "research scientist", "ai engineer"
+    ))
 
     for _, row in df.iterrows():
         job_id  = str(row["id"])
@@ -134,6 +163,7 @@ def _stage2_filter(
         work_t  = str(row.get("work_type", "")).lower()
         exp_lvl = str(row.get("experience_level", "")).lower()
         skills_t = str(row.get("skills", "")).lower()
+        full_text = f"{title} {company} {work_t} {exp_lvl} {skills_t} {desc}"
 
         # Combine primary text for strict dealbreaker matching
         primary_text = f"{title} {company} {work_t} {exp_lvl}"
@@ -154,23 +184,55 @@ def _stage2_filter(
                 blocked = True
                 break
 
+        # Common persona-level hard filters that are easy to express but often
+        # appear in inconsistent wording in real job descriptions.
+        if not blocked and any(d.lower() in ("defense", "defence", "military") for d in prefs.dealbreakers):
+            if any(term in full_text for term in DEFENSE_COMPANY_TERMS):
+                removed[job_id] = "Likely defense/military company"
+                blocked = True
+
+        if not blocked and new_grad_mode:
+            senior_markers = [
+                "mid-senior", "senior", "sr.", "staff", "principal",
+                "lead ", "director", "manager", "5+ years", "7+ years",
+            ]
+            if any(marker in full_text for marker in senior_markers) or EXPERIENCE_RE.search(full_text):
+                removed[job_id] = "Too senior or requires 3+ years"
+                blocked = True
+
+        if not blocked and company_size_mode:
+            startup_markers = ["stealth", "seed", "pre-seed", "early-stage", "early stage", "small startup", "startup"]
+            if any(marker in full_text for marker in startup_markers):
+                removed[job_id] = "Likely company-size mismatch"
+                blocked = True
+
+        if not blocked and any(d.lower() in ("contract", "1099", "temporary", "temp", "unpaid") for d in prefs.dealbreakers):
+            contract_markers = ["contract", "contractor", "1099", "temporary", "temp ", "unpaid"]
+            if any(marker in full_text for marker in contract_markers):
+                removed[job_id] = "Contract/temp/unpaid role"
+                blocked = True
+
         if blocked:
             continue
 
         # Salary hard floor
         sal_max = _to_float(row.get("salary_max"))
-        if prefs.min_salary > 0 and sal_max and sal_max < prefs.min_salary * 0.7:
-            removed[job_id] = f"Salary below threshold (${sal_max:,.0f} < ${prefs.min_salary*0.7:,.0f})"
+        if prefs.min_salary > 0 and sal_max and sal_max < prefs.min_salary:
+            removed[job_id] = f"Salary below threshold (${sal_max:,.0f} < ${prefs.min_salary:,.0f})"
             continue
 
         # Positive role relevance filter: if target roles are set,
-        # require at least one keyword match in title or description
-        if role_keywords:
-            title_and_desc = f"{title} {desc}"
-            has_role_relevance = any(kw in title_and_desc for kw in role_keywords)
-            if not has_role_relevance:
+        # require a real role-level match, not just a generic word like "engineer".
+        if prefs.target_roles:
+            if not _has_target_role_relevance(row, prefs.target_roles):
                 removed[job_id] = "No relevance to target roles"
                 continue
+
+        # Career-pivot ML personas should not get generic SWE/analytics roles
+        # unless the posting itself has clear ML/AI/data-science signals.
+        if ml_target_mode and not any(term in full_text for term in ML_RELATED_TERMS):
+            removed[job_id] = "No ML/AI signal for ML-focused target role"
+            continue
 
         # Visa sponsorship hard filter
         if prefs.visa_required:
@@ -191,6 +253,10 @@ def _stage2_filter(
             elif "bay area" in pref_loc:
                 bay_keywords = ["san francisco", "san jose", "palo alto", "mountain view", "sunnyvale", "santa clara", "bay area", "oakland", "cupertino", "menlo park"]
                 if any(k in job_loc for k in bay_keywords):
+                    loc_match = True
+            elif "nyc" in pref_loc or "new york" in pref_loc:
+                nyc_keywords = ["new york", "nyc", "manhattan", "brooklyn", "queens"]
+                if any(k in job_loc for k in nyc_keywords):
                     loc_match = True
             else:
                 pref_words = set([w for w in pref_loc.replace(",", " ").split() if len(w) > 3 and w not in ("area", "remote", "united", "states")])
@@ -348,6 +414,52 @@ def _role_match_score(row: pd.Series, target_roles: List[str]) -> float:
     
     return best_score
 
+
+def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
+    """Strict positive role filter used before final scoring."""
+    title = str(row.get("title", "")).lower()
+    desc = str(row.get("description", "")).lower()[:1000]
+    text = f"{title} {desc}"
+
+    for role in target_roles:
+        role_lower = role.lower().strip()
+        if not role_lower:
+            continue
+        if role_lower in text:
+            return True
+
+        if role_lower in ("ml engineer", "machine learning engineer"):
+            if ("machine learning" in text or re.search(r"\bml\b", text)) and "engineer" in text:
+                return True
+        elif role_lower in ("ai engineer",):
+            if ("artificial intelligence" in text or re.search(r"\bai\b", text)) and "engineer" in text:
+                return True
+        elif "applied scientist" in role_lower:
+            if "applied scientist" in text or ("scientist" in title and any(t in text for t in ML_RELATED_TERMS)):
+                return True
+        elif "research scientist" in role_lower:
+            if "research scientist" in text or ("scientist" in title and any(t in text for t in ML_RELATED_TERMS)):
+                return True
+        elif "data scientist" in role_lower:
+            if "data scientist" in text or ("data science" in text and "scientist" in title):
+                return True
+        elif "mlops" in role_lower or "platform engineer" in role_lower:
+            infra_terms = ["mlops", "platform", "kubernetes", "kafka", "spark", "ml infrastructure", "machine learning platform"]
+            if any(t in text for t in infra_terms) and ("engineer" in title or "platform" in title):
+                return True
+        elif "analytics engineer" in role_lower:
+            if "analytics engineer" in text or ("analytics" in title and "engineer" in title):
+                return True
+        elif "business intelligence" in role_lower or "bi analyst" in role_lower:
+            if "business intelligence" in text or "bi analyst" in text:
+                return True
+        else:
+            words = [w for w in re.split(r"\W+", role_lower) if len(w) > 2]
+            if words and all(w in text for w in words):
+                return True
+
+    return False
+
 def _skill_score(row: pd.Series, user_skills: List[str]) -> float:
     if not user_skills:
         return 0.5
@@ -386,6 +498,11 @@ def _location_score(row: pd.Series, prefs: UserPreferences) -> float:
             bay_keywords = ["san francisco", "san jose", "palo alto", "mountain view", "sunnyvale", "santa clara", "bay area", "oakland", "cupertino", "menlo park"]
             if any(k in loc for k in bay_keywords):
                 return 1.0
+
+        if "nyc" in pref_loc or "new york" in pref_loc:
+            nyc_keywords = ["new york", "nyc", "manhattan", "brooklyn", "queens"]
+            if any(k in loc for k in nyc_keywords):
+                return 1.0
                 
         # Fallback to word overlap for partial matches (e.g. "San Francisco" in pref, but loc is "San Francisco, CA")
         pref_words = set([w for w in pref_loc.replace(",", " ").split() if len(w) > 3 and w not in ("area", "remote", "united", "states")])
@@ -394,6 +511,12 @@ def _location_score(row: pd.Series, prefs: UserPreferences) -> float:
             
     if "remote" in loc and prefs.remote_ok:
         return 0.80
+
+    if prefs.visa_required:
+        company = str(row.get("company", "")).lower()
+        desc = str(row.get("description", "")).lower()[:1200]
+        if any(term in company or term in desc for term in KNOWN_H1B_SPONSOR_TERMS):
+            return max(0.75, 0.5 if not prefs.location else 0.25)
         
     if not prefs.location:
         return 0.5
