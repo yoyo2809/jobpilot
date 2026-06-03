@@ -22,10 +22,15 @@ Rules:
 - Use strong action verbs and quantify achievements where possible.
 - Do NOT invent qualifications the candidate doesn't have.
 - Omit irrelevant or basic skills (e.g., Excel, reporting) if the target role is advanced (e.g., ML/Data Science).
+- Must satisfy the Pass Criteria below. If the criteria mention ML, emphasize Python, ML, modeling, scikit-learn, data pipelines, and learning trajectory.
+- Do not lead with Excel, dashboards, reporting, Tableau, or generic business analysis when the pass criteria require ML.
 - Format with proper Markdown headers (# for name, ## for sections).
 
 Candidate Profile:
 {profile_summary}
+
+Pass Criteria:
+{pass_criteria}
 
 Target Job:
 Title: {job_title}
@@ -53,6 +58,7 @@ def generate_resume(profile: dict, job: dict) -> str:
 
     prompt = RESUME_PROMPT.format(
         profile_summary  = profile_summary,
+        pass_criteria    = _format_pass_criteria(profile),
         job_title        = job.get("title", ""),
         company          = job.get("company", ""),
         location         = job.get("location", ""),
@@ -81,6 +87,32 @@ def _format_profile_summary(profile: dict) -> str:
         profile.get("raw_text", "")[:2000],
     ]
     return "\n".join(lines)
+
+
+def _format_pass_criteria(profile: dict) -> str:
+    target_roles = " ".join(profile.get("target_roles", [])).lower()
+    dealbreakers = [str(d).lower() for d in profile.get("dealbreakers", [])]
+    criteria = []
+
+    ml_mode = any(term in target_roles for term in [
+        "ml engineer", "machine learning", "ai engineer",
+        "applied scientist", "research scientist", "data scientist",
+    ])
+    if ml_mode:
+        criteria.append("- Resume highlights Python/ML/modeling/scikit-learn experience first.")
+        criteria.append("- Resume does not lead with Excel, dashboarding, reporting, or generic analyst work.")
+        criteria.append("- Summary positions the candidate as pivoting toward ML engineering without inventing production ML experience.")
+
+    if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
+        criteria.append("- Tone should fit entry-to-mid level roles, not senior/staff leadership roles.")
+    if any(d in ("defense", "defence", "military") for d in dealbreakers):
+        criteria.append("- Do not frame the candidate toward defense or military work.")
+    if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
+        criteria.append("- Do not frame the resume toward contract, temporary, 1099, or unpaid roles.")
+
+    if not criteria:
+        criteria.append("- Align the resume with the stated target roles, skills, location, salary, and dealbreakers.")
+    return "\n".join(criteria)
 
 
 def resume_to_bytes(markdown_text: str) -> bytes:

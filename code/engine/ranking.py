@@ -52,6 +52,8 @@ DEFENSE_COMPANY_TERMS = [
     "lockheed", "raytheon", "rtx", "northrop", "boeing defense",
     "general dynamics", "bae systems", "l3harris", "leidos", "palantir",
     "anduril", "booz allen", "caci", "saic", "aerospace corporation",
+    "security clearance", "active clearance", "clearance required",
+    "ts/sci", "top secret", "dod ", "department of defense",
 ]
 
 KNOWN_H1B_SPONSOR_TERMS = [
@@ -158,7 +160,7 @@ def _stage2_filter(
     company_size_mode = "100" in background and "employee" in background
     ml_target_mode = any(term in target_text for term in (
         "machine learning", "ml engineer", "applied scientist",
-        "research scientist", "ai engineer"
+        "research scientist", "ai engineer", "data scientist"
     ))
 
     for _, row in df.iterrows():
@@ -200,7 +202,9 @@ def _stage2_filter(
         if not blocked and new_grad_mode:
             senior_markers = [
                 "mid-senior", "senior", "sr.", "staff", "principal",
-                "lead ", "director", "manager", "5+ years", "7+ years",
+                "lead ", "director", "manager", "executive", "distinguished",
+                "leader", "architect", "head of", " l5", "level 5",
+                " l6", "level 6", "5+ years", "7+ years",
             ]
             if any(marker in full_text for marker in senior_markers) or EXPERIENCE_RE.search(full_text):
                 removed[job_id] = "Too senior or requires 3+ years"
@@ -456,33 +460,42 @@ def _has_ml_focused_role(row: pd.Series, target_roles: List[str]) -> bool:
 
     if any(term in text for term in AI_ANNOTATION_TERMS):
         return False
+    if "developer, designer" in title or "devops and qa" in title:
+        return False
 
-    title_ml_terms = [
-        "machine learning", "ml engineer", "ai engineer", "applied scientist",
-        "research scientist", "nlp", "computer vision", "deep learning",
-        "mlops", "modeling engineer", "model engineer",
-    ]
-    if any(term in title for term in title_ml_terms):
+    if _has_ml_title_signal(title):
         return True
 
     if "software engineer" in title or title.strip() in {"software developer", "developer", "engineer"}:
         return False
 
     if "data scientist" in title or "data science" in title:
-        strong_model_terms = [
-            "machine learning", "predictive model", "predictive modeling",
-            "model training", "model deployment", "deep learning", "nlp",
-            "computer vision", "pytorch", "tensorflow", "neural network",
-        ]
-        reporting_terms = [
-            "tableau", "power bi", "dashboard", "reporting", "quick base",
-            "human services", "snap", "tanf", "data visualization",
-        ]
-        model_hits = sum(1 for term in strong_model_terms if term in text)
-        reporting_hits = sum(1 for term in reporting_terms if term in text)
-        return model_hits >= 2 and reporting_hits <= 1
+        return False
 
-    return _has_ml_signal(text) and _has_target_role_relevance(row, target_roles)
+    return False
+
+
+def _has_ml_title_signal(title: str) -> bool:
+    """Require the job title itself to look ML/AI-focused."""
+    lowered = title.lower()
+    title_terms = [
+        "machine learning", "ml engineer", "mlops", "ai engineer",
+        "applied scientist", "nlp",
+        "computer vision", "deep learning", "generative ai",
+        "large language model", "llm", "modeling engineer",
+        "model engineer", "data scientist, machine learning",
+        "machine learning data scientist", "applied ml",
+        "stable diffusion",
+    ]
+    if any(term in lowered for term in title_terms):
+        return True
+    if "research scientist" in lowered:
+        return bool(re.search(r"\b(ml|ai|nlp|llm)\b", lowered) or any(term in lowered for term in [
+            "machine learning", "deep learning", "computer vision", "generative",
+        ]))
+    if "data scientist" in lowered and re.search(r"\b(ml|ai|nlp)\b", lowered):
+        return True
+    return bool(re.search(r"\b(ml|nlp)\b", lowered) and ("engineer" in lowered or "scientist" in lowered))
 
 
 def _has_ml_signal(text: str) -> bool:
@@ -569,6 +582,71 @@ def _to_float(val) -> Optional[float]:
         return None
 
 
+def describe_pass_criteria(prefs: UserPreferences) -> List[str]:
+    """Human-readable pass criteria inferred from the active persona inputs."""
+    criteria: List[str] = []
+    target_text = " ".join(prefs.target_roles).lower()
+    background = (prefs.background or "").lower()
+    dealbreakers = [d.lower() for d in prefs.dealbreakers]
+
+    ml_mode = any(term in target_text for term in (
+        "machine learning", "ml engineer", "ai engineer",
+        "applied scientist", "research scientist", "data scientist"
+    ))
+    if ml_mode:
+        criteria.append("Top-10 jobs must be visibly ML/AI-related from the title.")
+        criteria.append("Resume must highlight Python/ML/modeling skills, not Excel/reporting.")
+
+    if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
+        criteria.append("Exclude Senior/Staff/Principal/Director-level roles.")
+    if any(d in ("defense", "defence", "military") for d in dealbreakers):
+        criteria.append("Exclude defense or military companies/roles.")
+    if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
+        criteria.append("Exclude contract, temporary, 1099, or unpaid roles.")
+    if any(d in ("3+ years", "5+ years", "7+ years", "10+ years") for d in dealbreakers):
+        criteria.append("Exclude roles requiring more experience than the persona allows.")
+    if "new grad" in background or "recent graduate" in background:
+        criteria.append("Prefer entry-level/new-grad appropriate roles.")
+    if prefs.min_salary > 0:
+        criteria.append(f"Salary max should meet at least ${prefs.min_salary:,.0f}/yr when salary is listed.")
+    if prefs.location:
+        criteria.append(f"Prefer location match: {prefs.location}.")
+
+    return criteria
+
+
+def evaluate_pass_criteria(row: pd.Series, prefs: UserPreferences) -> List[tuple[str, bool]]:
+    """Per-job pass/fail checks shown in the explanation panel."""
+    title = str(row.get("title", "")).lower()
+    company = str(row.get("company", "")).lower()
+    exp_lvl = str(row.get("experience_level", "")).lower()
+    work_t = str(row.get("work_type", "")).lower()
+    desc = str(row.get("description", "")).lower()[:1200]
+    text = f"{title} {company} {exp_lvl} {work_t} {desc}"
+    checks: List[tuple[str, bool]] = []
+
+    target_text = " ".join(prefs.target_roles).lower()
+    ml_mode = any(term in target_text for term in (
+        "machine learning", "ml engineer", "ai engineer",
+        "applied scientist", "research scientist", "data scientist"
+    ))
+    if ml_mode:
+        checks.append(("ML/AI-focused title", _has_ml_focused_role(row, prefs.target_roles)))
+
+    dealbreakers = [d.lower() for d in prefs.dealbreakers]
+    if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
+        senior_terms = ["senior", "sr.", "staff", "principal", "director", "vp", "lead "]
+        checks.append(("No Senior/Staff-level signal", not any(term in text for term in senior_terms)))
+    if any(d in ("defense", "defence", "military") for d in dealbreakers):
+        checks.append(("No defense/military signal", not any(term in text for term in DEFENSE_COMPANY_TERMS + ["defense", "defence", "military"])))
+    if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
+        checks.append(("No contract/temp/unpaid signal", not any(term in text for term in ["contract", "1099", "temporary", "temp ", "unpaid"])))
+    if any(d in ("3+ years", "5+ years", "7+ years", "10+ years") for d in dealbreakers):
+        checks.append(("Experience requirement is not too high", not EXPERIENCE_RE.search(text)))
+
+    return checks
+
+
 # ── Feedback scores ───────────────────────────────────────────────────────────
 
 def _load_feedback_scores(session_id: str) -> Dict[str, float]:
@@ -603,6 +681,22 @@ def explain_ranking(row: pd.Series, prefs: UserPreferences) -> str:
     """
     lines = [
         f"**Overall Match Score: {row.get('match_pct', 0)}%**",
+        "",
+        "### Pass Criteria Check",
+    ]
+
+    criteria = describe_pass_criteria(prefs)
+    if criteria:
+        lines.append("This ranking is being filtered against:")
+        lines.extend(f"- {criterion}" for criterion in criteria[:8])
+    checks = evaluate_pass_criteria(row, prefs)
+    if checks:
+        lines.append("")
+        for label, passed in checks:
+            status = "PASS" if passed else "FAIL"
+            lines.append(f"- **{status}** — {label}")
+
+    lines += [
         "",
         "### Score Breakdown",
         f"- 🔍 **Embedding Similarity** (Lecture 5): `{row.get('embedding_score', 0):.2f}` × 25%",
