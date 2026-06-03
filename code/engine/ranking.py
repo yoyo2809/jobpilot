@@ -240,34 +240,9 @@ def _stage2_filter(
                 removed[job_id] = "Does not offer Visa sponsorship"
                 continue
 
-        # Location hard filter
-        if prefs.location:
-            pref_loc = prefs.location.lower()
-            job_loc = str(row.get("location", "")).lower()
-            is_remote = "remote" in job_loc or "remote" in work_t
-            
-            # Check if job matches preferred location
-            loc_match = False
-            if pref_loc in job_loc or job_loc in pref_loc:
-                loc_match = True
-            elif "bay area" in pref_loc:
-                bay_keywords = ["san francisco", "san jose", "palo alto", "mountain view", "sunnyvale", "santa clara", "bay area", "oakland", "cupertino", "menlo park"]
-                if any(k in job_loc for k in bay_keywords):
-                    loc_match = True
-            elif "nyc" in pref_loc or "new york" in pref_loc:
-                nyc_keywords = ["new york", "nyc", "manhattan", "brooklyn", "queens"]
-                if any(k in job_loc for k in nyc_keywords):
-                    loc_match = True
-            else:
-                pref_words = set([w for w in pref_loc.replace(",", " ").split() if len(w) > 3 and w not in ("area", "remote", "united", "states")])
-                if pref_words and any(w in job_loc for w in pref_words):
-                    loc_match = True
-                    
-            if not loc_match and not (is_remote and prefs.remote_ok):
-                # Only strictly filter if we're dealing with a real city/region, not "United States"
-                if pref_loc != "united states":
-                    removed[job_id] = f"Location mismatch ({job_loc})"
-                    continue
+        # Location is a preference, not a hard dealbreaker in the assignment.
+        # It is handled in _location_score so strict personas still get enough
+        # Top-10 rows when a local dataset has sparse Bay Area/NYC postings.
 
         keep.append(row)
 

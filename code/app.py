@@ -20,6 +20,7 @@ from engine import feedback as fb_engine
 from engine import profile as profile_mod
 from engine import resume_gen
 from engine import ingestion
+from engine.preferences import parse_custom_dealbreakers
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -186,7 +187,10 @@ with st.sidebar:
         "🚫 Dealbreakers (exclude these)",
         dealbreaker_options,
     )
-    custom_dbs = st.text_input("🚫 Custom Dealbreakers (comma-separated)", placeholder="e.g. defense, healthcare")
+    custom_dbs = st.text_input(
+        "🚫 Custom Dealbreakers / Constraints",
+        placeholder="e.g. No 5+ years ML experience required.",
+    )
 
     # Combine extracted from PDF (if any) + manual inputs
     extracted_roles = st.session_state.profile.get("target_roles", []) if st.session_state.profile else []
@@ -198,7 +202,7 @@ with st.sidebar:
         extracted_skills.extend([s.strip() for s in manual_skills_str.split(",") if s.strip()])
 
     if custom_dbs:
-        dealbreakers.extend([d.strip() for d in custom_dbs.split(",") if d.strip()])
+        dealbreakers.extend(parse_custom_dealbreakers(custom_dbs))
 
     prefs = UserPreferences(
         background    = manual_background,
