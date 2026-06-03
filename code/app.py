@@ -178,11 +178,13 @@ with st.sidebar:
         "Junior", "Entry Level", "Contract", "Internship",
         "Senior", "Staff", "Principal", "Director", "VP",
         "5+ years", "7+ years", "10+ years",
+        "Defense", "Military"
     ]
     dealbreakers = st.multiselect(
         "🚫 Dealbreakers (exclude these)",
         dealbreaker_options,
     )
+    custom_dbs = st.text_input("🚫 Custom Dealbreakers (comma-separated)", placeholder="e.g. defense, healthcare")
 
     # Combine extracted from PDF (if any) + manual inputs
     extracted_roles = st.session_state.profile.get("target_roles", []) if st.session_state.profile else []
@@ -192,6 +194,9 @@ with st.sidebar:
     extracted_skills = st.session_state.profile.get("skills", []) if st.session_state.profile else []
     if manual_skills_str:
         extracted_skills.extend([s.strip() for s in manual_skills_str.split(",") if s.strip()])
+
+    if custom_dbs:
+        dealbreakers.extend([d.strip() for d in custom_dbs.split(",") if d.strip()])
 
     prefs = UserPreferences(
         location      = location,
