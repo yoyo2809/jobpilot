@@ -78,6 +78,11 @@ AI_ANNOTATION_TERMS = [
     "paid hourly", "$40+ usd per hour",
 ]
 
+TINY_STARTUP_TERMS = [
+    "stealth", "seed", "pre-seed", "early-stage", "early stage",
+    "small startup", "startup",
+]
+
 EXPERIENCE_RE = re.compile(
     r"\b(?:[3-9]|1[0-9])\s*\+?\s*(?:years?|yrs?)\b|"
     r"\b(?:three|four|five|six|seven|eight|nine|ten)\s*\+?\s*(?:years?|yrs?)\b|"
@@ -157,7 +162,7 @@ def _stage2_filter(
         any("junior" in r.lower() for r in prefs.target_roles) or
         any(db_kw.lower() in ("3+ years", "5+ years") for db_kw in prefs.dealbreakers)
     )
-    company_size_mode = "100" in background and "employee" in background
+    company_size_mode = _is_company_size_mode(prefs)
     ml_target_mode = _is_ml_target_mode(prefs)
 
     for _, row in df.iterrows():
@@ -208,8 +213,7 @@ def _stage2_filter(
                 blocked = True
 
         if not blocked and company_size_mode:
-            startup_markers = ["stealth", "seed", "pre-seed", "early-stage", "early stage", "small startup", "startup"]
-            if any(marker in full_text for marker in startup_markers):
+            if any(marker in full_text for marker in TINY_STARTUP_TERMS):
                 removed[job_id] = "Likely company-size mismatch"
                 blocked = True
 
@@ -416,6 +420,17 @@ def _is_ml_target_mode(prefs: UserPreferences) -> bool:
         "pivot to ml", "pivoting to ml", "ml engineering",
         "machine learning engineering", "wants to pivot to ml",
     ])
+
+
+def _is_company_size_mode(prefs: UserPreferences) -> bool:
+    """Detect personas that prefer established companies over tiny startups."""
+    background = (prefs.background or "").lower()
+    return (
+        ("100" in background and "employee" in background) or
+        "100+ employees" in background or
+        "larger company" in background or
+        "established company" in background
+    )
 
 
 def _has_target_role_relevance(
@@ -628,6 +643,10 @@ def describe_pass_criteria(prefs: UserPreferences) -> List[str]:
 
     if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
         criteria.append("Exclude Senior/Staff/Principal/Director-level roles.")
+    if any(d in ("junior", "entry", "entry level", "internship") for d in dealbreakers):
+        criteria.append("Top-10 must have zero Junior/Entry-level roles.")
+    if _is_company_size_mode(prefs):
+        criteria.append("Top-10 must have zero tiny startups.")
     if any(d in ("defense", "defence", "military") for d in dealbreakers):
         criteria.append("Exclude defense or military companies/roles.")
     if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
@@ -662,6 +681,11 @@ def evaluate_pass_criteria(row: pd.Series, prefs: UserPreferences) -> List[tuple
     if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
         senior_terms = ["senior", "sr.", "staff", "principal", "director", "vp", "lead "]
         checks.append(("No Senior/Staff-level signal", not any(term in text for term in senior_terms)))
+    if any(d in ("junior", "entry", "entry level", "internship") for d in dealbreakers):
+        junior_terms = ["junior", "jr.", "entry", "entry level", "intern", "internship", "new grad"]
+        checks.append(("No Junior/Entry-level signal", not any(term in text for term in junior_terms)))
+    if _is_company_size_mode(prefs):
+        checks.append(("No tiny-startup signal", not any(term in text for term in TINY_STARTUP_TERMS)))
     if any(d in ("defense", "defence", "military") for d in dealbreakers):
         checks.append(("No defense/military signal", not any(term in text for term in DEFENSE_COMPANY_TERMS + ["defense", "defence", "military"])))
     if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
