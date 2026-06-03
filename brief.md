@@ -56,20 +56,14 @@ A static ranking system cannot learn a user's unstated or evolving preferences o
 
 To empirically evaluate the system's performance, we designed an offline benchmarking suite utilizing four distinct "Edge Case" Personas. We measured ranking quality using **NDCG@10** (Normalized Discounted Cumulative Gain) and **Precision@10** against manually annotated ground truth targets.
 
-### 4.1 Persona Profiles & Edge Case Behaviors
-1. **Aisha (Career Pivoter)**: Aisha is transitioning from Marketing to Data Analytics. Her resume lacks standard data titles but possesses the underlying analytical skills. *Edge Case Handled: Dense embeddings successfully solved the vocabulary gap that crippled the BM25 baseline.* 
-2. **Marcus (New Grad)**: Marcus has numerous academic projects but zero industry experience. *Edge Case Handled: The Adaptive Re-ranker successfully learned his preference and penalized Senior/Lead roles after two "Pass" clicks.*
-3. **Priya (Experienced Niche)**: Priya is highly specialized in a rare, legacy tech stack. *Edge Case Handled: The L3 Multi-Stage logic (specifically the 35% Skill Overlap weight) corrected the embedding model's tendency to over-generalize her niche skills.*
-4. **Kenji (International Visa)**: Kenji requires immediate H1-B visa sponsorship. Non-sponsoring companies are absolute dealbreakers regardless of how perfectly the skills match. *Edge Case Handled: The L2 Hard Filter reliably eradicated all false-positive matches that the FAISS index initially returned.*
+### 4.1 Persona Profiles & Pass/Fail Criteria Evaluation
 
-### 4.2 Persona Pass/Fail Criteria Evaluation
-
-| Persona | Key Pass Criteria | Result | Implementation Notes |
-| :--- | :--- | :---: | :--- |
-| **Aisha (Pivoter)** | Top-10 has zero Senior/Staff roles, zero defence companies. All ML-related. | ✅ PASS | L2 Hard filters successfully parsed and blocked Senior/Staff and defence industry flags. |
-| **Marcus (New Grad)** | No 3+ yr requirements, leads with education. | ✅ PASS | Adaptive Feedback learned to penalize mid/senior roles after initial explicit rejections. |
-| **Priya (Niche)** | No Junior titles, Kafka framed as ML infra. | ✅ PASS | L3 Multi-Stage Re-ranker heavily weighted her exact niche technical stack. |
-| **Kenji (Visa req.)** | No contract roles, favors large companies (sponsors visa). | ✅ PASS | Strict boolean L2 filter eradicated all non-sponsoring employers prior to re-ranking. |
+| Persona | Background & Edge Case | Key Pass Criteria | Result |
+| :--- | :--- | :--- | :---: |
+| **Aisha (Pivoter)** | Marketing → Analytics. *Embeddings solved vocabulary gap.* | Top-10 has zero Senior/Staff, zero defence. All ML-related. | ✅ PASS |
+| **Marcus (New Grad)** | No industry exp. *Feedback learned to penalize Senior roles.* | No 3+ yr requirements, leads with education. | ✅ PASS |
+| **Priya (Niche)** | Rare tech stack. *Re-ranker corrected over-generalization.* | No Junior titles, Kafka framed as ML infra. | ✅ PASS |
+| **Kenji (Visa req.)** | Needs H1-B. *Hard Filter eradicated false-positive matches.* | No contract roles, favors large companies (sponsors visa). | ✅ PASS |
 
 ### 4.3 Offline Benchmark Results Comparison
 
@@ -87,22 +81,9 @@ Beyond offline benchmarks, the Streamlit UI features a live analytics dashboard 
 
 ---
 
-## 5. System Limitations & Future Architectural Enhancements
+## 5. Limitations & Future Enhancements
 
-While JobPilot demonstrates significant improvements over baseline matching systems and effectively utilizes BAX-423 concepts, several architectural limitations remain:
-
-1. **Embedding Context Window Truncation**:
-   The `all-MiniLM-L6-v2` transformer enforces a strict 256-token limit. Many enterprise job descriptions exceed 1,000 words. Consequently, specific technical requirements located at the bottom of a posting may be truncated before they are mathematically embedded.
-   * *Proposed Solution*: Implement a sliding window document chunking strategy with Max-Pooling across chunks, or upgrade to a modern long-context embedding model such as `Nomic-Embed` (which supports an 8k token window).
-
-2. **LLM Extraction Synchronous Latency**:
-   Relying on the cloud-based Gemini API for parsing unstructured PDF resumes introduces a synchronous network bottleneck (typically 2-4 seconds) during user onboarding. This degrades the initial user experience and disrupts the otherwise real-time feel of the application.
-   * *Proposed Solution*: Deprecate the cloud LLM dependency for basic onboarding and deploy a quantized, local Named Entity Recognition (NER) model (e.g., GLiNER or a fine-tuned spaCy pipeline) to extract skills and titles instantaneously on the edge.
-
-3. **Feedback Sparsity and the Cold Start Problem**:
-   The adaptive semantic feedback engine performs exceptionally well after 5 or more interactions, but brand-new users face a "cold start" where initial rankings rely solely on zero-shot embeddings.
-   * *Proposed Solution*: Implement Cross-User Collaborative Filtering. By persisting session data and analyzing the interaction histories of users with similar demographic and skill profiles, the system can dynamically assign default interaction weights to new users before their very first click.
-
-4. **FAISS Index Volatility**:
-   Currently, the FAISS index is rebuilt entirely in memory. As the SQLite database grows via the streaming Adzuna API, rebuilding the index becomes computationally expensive.
-   * *Proposed Solution*: Transition to an incremental IndexIVFFlat FAISS architecture, allowing for batch vector additions without requiring a full re-computation of the vector space.
+1. **Context Window Truncation**: `all-MiniLM-L6-v2` enforces a 256-token limit, truncating long job descriptions. *Solution*: Implement sliding window chunking, or upgrade to long-context models like `Nomic-Embed`.
+2. **LLM Extraction Latency**: Synchronous Gemini API calls cause 2-4s latency during resume onboarding. *Solution*: Deploy quantized, local NER models (e.g., GLiNER) for instantaneous edge extraction.
+3. **Cold Start Problem**: Adaptive feedback requires ~5 interactions before altering results. *Solution*: Implement Cross-User Collaborative Filtering to initialize weights based on demographic profiles.
+4. **FAISS Volatility**: Rebuilding the index in-memory scales poorly as the streaming DB grows. *Solution*: Transition to incremental `IndexIVFFlat` for batch vector additions without full re-computation.
