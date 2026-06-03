@@ -334,7 +334,7 @@ with tab_match:
             m1.metric("Avg Top-10 Relevance", f"{avg_rel:.1f}%")
             
             # Metric 2: Session Precision (from likes/rejects)
-            fb = fb_engine.get_stats(st.session_state.session_id)
+            fb = fb_engine.get_session_summary(st.session_state.session_id)
             total_fb = fb["accepted"] + fb["rejected"]
             prec = (fb["accepted"] / total_fb * 100) if total_fb > 0 else 0
             m2.metric("User Precision (Hit Rate)", f"{prec:.1f}%")
