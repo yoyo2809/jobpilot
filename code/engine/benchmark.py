@@ -19,7 +19,7 @@ from rank_bm25 import BM25Okapi
 
 from engine import database as db
 from engine.embeddings import EmbeddingEngine
-from engine.ranking import UserPreferences, rank_jobs
+from engine.ranking import UserPreferences, rank_jobs, _has_ml_focused_role
 
 
 # ── NDCG helper ───────────────────────────────────────────────────────────────
@@ -191,9 +191,9 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
 
     if "Aisha" in persona:
         blocked = ["senior", "staff", "defense", "defence", "military"]
-        ml_terms = ["machine learning", " ml ", "applied scientist", "artificial intelligence", "deep learning", "pytorch", "tensorflow", "nlp", "computer vision"]
-        return (not has_any(blocked) and all(any(term in t for term in ml_terms) for t in text.tolist()),
-                "No senior/staff/defense; every Top-10 row has an ML/AI/data-science signal")
+        ml_focused = all(_has_ml_focused_role(row, cfg.get("target_roles", [])) for _, row in top.iterrows())
+        return (not has_any(blocked) and ml_focused,
+                "No senior/staff/defense; every Top-10 row is a focused ML/AI role")
 
     if "Marcus" in persona:
         blocked = ["3+ years", "3 years", "4 years", "5+ years", "contract", "unpaid", "mid-senior", "senior"]

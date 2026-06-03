@@ -70,6 +70,12 @@ ML_RELATED_TERMS = [
     "neural network", "model training", "model deployment", "mlops",
 ]
 
+AI_ANNOTATION_TERMS = [
+    "dataannotation", "train ai chatbots", "training ai chatbots",
+    "evaluate code quality produced by ai models", "coding chatbot",
+    "paid hourly", "$40+ usd per hour",
+]
+
 EXPERIENCE_RE = re.compile(
     r"\b(?:[3-9]|1[0-9])\s*\+?\s*(?:years?|yrs?)\b|"
     r"\b(?:three|four|five|six|seven|eight|nine|ten)\s*\+?\s*(?:years?|yrs?)\b|"
@@ -229,9 +235,9 @@ def _stage2_filter(
                 continue
 
         # Career-pivot ML personas should not get generic SWE/analytics roles
-        # unless the posting itself has clear ML/AI/data-science signals.
-        if ml_target_mode and not _has_ml_signal(full_text):
-            removed[job_id] = "No ML/AI signal for ML-focused target role"
+        # or AI annotation gigs unless the role itself is visibly ML-focused.
+        if ml_target_mode and not _has_ml_focused_role(row, prefs.target_roles):
+            removed[job_id] = "Not a focused ML/AI role for ML-focused target role"
             continue
 
         # Visa sponsorship hard filter
@@ -434,6 +440,49 @@ def _has_target_role_relevance(row: pd.Series, target_roles: List[str]) -> bool:
                 return True
 
     return False
+
+
+def _has_ml_focused_role(row: pd.Series, target_roles: List[str]) -> bool:
+    """
+    Strict gate for personas whose pass criteria require every Top-10 job to be
+    ML-related. This rejects generic SWE/data/annotation jobs that merely mention
+    AI somewhere in the description.
+    """
+    title = str(row.get("title", "")).lower()
+    company = str(row.get("company", "")).lower()
+    desc = str(row.get("description", "")).lower()[:1600]
+    skills = str(row.get("skills", "")).lower()
+    text = f"{title} {company} {skills} {desc}"
+
+    if any(term in text for term in AI_ANNOTATION_TERMS):
+        return False
+
+    title_ml_terms = [
+        "machine learning", "ml engineer", "ai engineer", "applied scientist",
+        "research scientist", "nlp", "computer vision", "deep learning",
+        "mlops", "modeling engineer", "model engineer",
+    ]
+    if any(term in title for term in title_ml_terms):
+        return True
+
+    if "software engineer" in title or title.strip() in {"software developer", "developer", "engineer"}:
+        return False
+
+    if "data scientist" in title or "data science" in title:
+        strong_model_terms = [
+            "machine learning", "predictive model", "predictive modeling",
+            "model training", "model deployment", "deep learning", "nlp",
+            "computer vision", "pytorch", "tensorflow", "neural network",
+        ]
+        reporting_terms = [
+            "tableau", "power bi", "dashboard", "reporting", "quick base",
+            "human services", "snap", "tanf", "data visualization",
+        ]
+        model_hits = sum(1 for term in strong_model_terms if term in text)
+        reporting_hits = sum(1 for term in reporting_terms if term in text)
+        return model_hits >= 2 and reporting_hits <= 1
+
+    return _has_ml_signal(text) and _has_target_role_relevance(row, target_roles)
 
 
 def _has_ml_signal(text: str) -> bool:
