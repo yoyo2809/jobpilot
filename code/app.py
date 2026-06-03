@@ -302,15 +302,19 @@ def get_ranked_jobs() -> pd.DataFrame:
     if st.session_state.ranked_jobs is None:
         profile  = st.session_state.profile
         prefs    = st.session_state.prefs
-        profile_text = profile.get("raw_text", "")[:800] if profile else ""
+        profile_text = profile.get("raw_text", "")[:400] if profile else ""
         target_roles = " ".join(profile.get("target_roles", [])) if profile else " ".join(prefs.target_roles)
         skills_text  = " ".join(profile.get("skills", [])[:10]) if profile else " ".join(prefs.skills[:10])
         
+        # Target roles go FIRST and are repeated 3x to dominate the embedding.
+        # This ensures FAISS retrieves what the user WANTS, not what they currently ARE.
+        # Background text is truncated to 200 chars to provide context without overwhelming.
+        bg_text = prefs.background[:200] if prefs.background else ""
         query    = " ".join([
-            profile_text,
-            prefs.background[:800] if prefs.background else "",
-            target_roles,
+            target_roles, target_roles, target_roles,
             skills_text,
+            bg_text,
+            profile_text,
         ])
         with st.spinner("🔍 Retrieving & ranking jobs …"):
             ranked = rank_jobs(
