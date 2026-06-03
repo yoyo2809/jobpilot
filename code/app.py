@@ -280,8 +280,9 @@ def _show_market_overview():
     c3.metric("Locations", locs.nunique())
 
 
-if not st.session_state.profile:
-    st.info("👆 Upload your resume in the sidebar to get personalised job matches.")
+has_manual_prefs = bool(st.session_state.prefs and (st.session_state.prefs.background or st.session_state.prefs.skills or st.session_state.prefs.target_roles))
+if not st.session_state.profile and not has_manual_prefs:
+    st.info("👆 Upload your resume or fill out the preferences in the sidebar to get personalised job matches.")
     _demo_tab, _about_tab = st.tabs(["📊 Market Overview", "ℹ️ About"])
     with _demo_tab:
         _show_market_overview()
