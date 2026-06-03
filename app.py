@@ -166,6 +166,8 @@ with st.sidebar:
     st.divider()
     st.markdown("## ⚙️ Preferences")
 
+    manual_roles_str = st.text_input("🎯 Target Roles (comma-separated)", placeholder="e.g. Data Analyst, Software Engineer")
+    manual_skills_str = st.text_input("🛠 Skills (comma-separated)", placeholder="e.g. Python, SQL, Machine Learning")
     location = st.text_input("📍 Preferred Location", placeholder="San Francisco, CA")
     min_salary = st.slider("💰 Min Salary ($/yr)", 0, 300_000, 80_000, 10_000,
                            format="$%d")
@@ -182,11 +184,20 @@ with st.sidebar:
         dealbreaker_options,
     )
 
+    # Combine extracted from PDF (if any) + manual inputs
+    extracted_roles = st.session_state.profile.get("target_roles", []) if st.session_state.profile else []
+    if manual_roles_str:
+        extracted_roles.extend([r.strip() for r in manual_roles_str.split(",") if r.strip()])
+        
+    extracted_skills = st.session_state.profile.get("skills", []) if st.session_state.profile else []
+    if manual_skills_str:
+        extracted_skills.extend([s.strip() for s in manual_skills_str.split(",") if s.strip()])
+
     prefs = UserPreferences(
         location      = location,
         min_salary    = float(min_salary),
-        skills        = st.session_state.profile.get("skills", []) if st.session_state.profile else [],
-        target_roles  = st.session_state.profile.get("target_roles", []) if st.session_state.profile else [],
+        skills        = list(set(extracted_skills)),
+        target_roles  = list(set(extracted_roles)),
         dealbreakers  = dealbreakers,
         remote_ok     = remote_ok,
         visa_required = visa_req,
