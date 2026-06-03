@@ -155,9 +155,45 @@ def _stage3_rerank(
 
     skill_scores    = df.apply(lambda r: _skill_score(r, prefs.skills), axis=1)
     location_scores = df.apply(lambda r: _location_score(r, prefs), axis=1)
-    fb_scores       = df["id"].astype(str).map(feedback_scores).fillna(0.0)
-    # Clamp feedback to [-1, 1] then shift to [0, 1]
-    fb_norm         = (fb_scores.clip(-1, 1) + 1) / 2
+    
+    # Base explicit feedback (exact job ID match)
+    fb_explicit     = df["id"].astype(str).map(feedback_scores).fillna(0.0)
+    
+    # Adaptive Learning (Propagate to similar companies / titles)
+    # If the user liked Apple before, other Apple jobs get a slight boost.
+    # If the user rejected an Analyst role, other Analyst roles get penalized.
+    company_fb = {}
+    title_fb = {}
+    
+    # We need to look up the historical jobs the user gave feedback on
+    if feedback_scores:
+        hist_jobs = db.get_jobs_by_ids(list(feedback_scores.keys()))
+        for _, hj in hist_jobs.iterrows():
+            hid = str(hj["id"])
+            score = feedback_scores.get(hid, 0)
+            comp = str(hj.get("company", "")).lower()
+            if comp:
+                company_fb[comp] = company_fb.get(comp, 0) + (score * 0.5) # 50% propagation
+                
+            tit = str(hj.get("title", "")).lower()
+            if tit:
+                title_fb[tit] = title_fb.get(tit, 0) + (score * 0.3)
+    
+    def _compute_semantic_fb(row):
+        base = 0.0
+        c = str(row.get("company", "")).lower()
+        t = str(row.get("title", "")).lower()
+        if c in company_fb: base += company_fb[c]
+        if t in title_fb: base += title_fb[t]
+        return base
+        
+    fb_implicit = df.apply(_compute_semantic_fb, axis=1)
+    
+    # Combine explicit (exact job) and implicit (semantic propagation)
+    fb_total = fb_explicit + fb_implicit
+
+    # Clamp feedback to [-1, 1] then shift to [0, 1] for the scoring model
+    fb_norm         = (fb_total.clip(-1, 1) + 1) / 2
 
     emb = df["embedding_score"].clip(0, 1)
 
