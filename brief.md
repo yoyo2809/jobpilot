@@ -81,9 +81,22 @@ Beyond offline benchmarks, the Streamlit UI features a live analytics dashboard 
 
 ---
 
-## 5. Limitations & Future Enhancements
+## 5. System Limitations & Future Architectural Enhancements
 
-1. **Context Window Truncation**: `all-MiniLM-L6-v2` enforces a 256-token limit, truncating long job descriptions. *Solution*: Implement sliding window chunking, or upgrade to long-context models like `Nomic-Embed`.
-2. **LLM Extraction Latency**: Synchronous Gemini API calls cause 2-4s latency during resume onboarding. *Solution*: Deploy quantized, local NER models (e.g., GLiNER) for instantaneous edge extraction.
-3. **Cold Start Problem**: Adaptive feedback requires ~5 interactions before altering results. *Solution*: Implement Cross-User Collaborative Filtering to initialize weights based on demographic profiles.
-4. **FAISS Volatility**: Rebuilding the index in-memory scales poorly as the streaming DB grows. *Solution*: Transition to incremental `IndexIVFFlat` for batch vector additions without full re-computation.
+While JobPilot demonstrates significant improvements over baseline matching systems and effectively utilizes BAX-423 concepts, several architectural limitations remain:
+
+1. **Embedding Context Window Truncation**:
+   The `all-MiniLM-L6-v2` transformer enforces a strict 256-token limit. Many enterprise job descriptions exceed 1,000 words. Consequently, specific technical requirements located at the bottom of a posting may be truncated before they are mathematically embedded.
+   * *Proposed Solution*: Implement a sliding window document chunking strategy with Max-Pooling across chunks, or upgrade to a modern long-context embedding model such as `Nomic-Embed` (which supports an 8k token window).
+
+2. **LLM Extraction Synchronous Latency**:
+   Relying on the cloud-based Gemini API for parsing unstructured PDF resumes introduces a synchronous network bottleneck (typically 2-4 seconds) during user onboarding. This degrades the initial user experience and disrupts the otherwise real-time feel of the application.
+   * *Proposed Solution*: Deprecate the cloud LLM dependency for basic onboarding and deploy a quantized, local Named Entity Recognition (NER) model (e.g., GLiNER or a fine-tuned spaCy pipeline) to extract skills and titles instantaneously on the edge.
+
+3. **Feedback Sparsity and the Cold Start Problem**:
+   The adaptive semantic feedback engine performs exceptionally well after 5 or more interactions, but brand-new users face a "cold start" where initial rankings rely solely on zero-shot embeddings.
+   * *Proposed Solution*: Implement Cross-User Collaborative Filtering. By persisting session data and analyzing the interaction histories of users with similar demographic and skill profiles, the system can dynamically assign default interaction weights to new users before their very first click.
+
+4. **FAISS Index Volatility**:
+   Currently, the FAISS index is rebuilt entirely in memory. As the SQLite database grows via the streaming Adzuna API, rebuilding the index becomes computationally expensive.
+   * *Proposed Solution*: Transition to an incremental IndexIVFFlat FAISS architecture, allowing for batch vector additions without requiring a full re-computation of the vector space.
