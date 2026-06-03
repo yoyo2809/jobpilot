@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from engine import database as db
 from engine.embeddings import EmbeddingEngine
 
-CSV_PATH = Path(__file__).parent.parent / "data" / "jobs_snapshot.csv"
+CSV_PATH = Path(__file__).parent.parent.parent / "data" / "jobs_snapshot.csv"
 
 
 def main():

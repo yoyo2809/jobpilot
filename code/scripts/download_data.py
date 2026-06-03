@@ -19,7 +19,7 @@ import kagglehub
 import datetime
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-ROOT        = Path(__file__).parent.parent
+ROOT        = Path(__file__).parent.parent.parent
 DATA_DIR    = ROOT / "data"
 OUTPUT_CSV  = DATA_DIR / "jobs_snapshot.csv"
 

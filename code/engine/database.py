@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-DB_PATH = Path(__file__).parent.parent / "data" / "jobpilot.db"
+DB_PATH = Path(__file__).parent.parent.parent / "data" / "jobpilot.db"
 
 
 def get_connection() -> sqlite3.Connection:

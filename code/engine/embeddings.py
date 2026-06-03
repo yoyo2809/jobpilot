@@ -16,8 +16,8 @@ from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 MODEL_NAME   = "all-MiniLM-L6-v2"   # 384-dim, fast, free
-INDEX_PATH   = Path(__file__).parent.parent / "data" / "faiss_index.bin"
-META_PATH    = Path(__file__).parent.parent / "data" / "index_metadata.pkl"
+INDEX_PATH   = Path(__file__).parent.parent.parent / "data" / "faiss_index.bin"
+META_PATH    = Path(__file__).parent.parent.parent / "data" / "index_metadata.pkl"
 EMBED_DIM    = 384
 
 
