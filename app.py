@@ -410,20 +410,33 @@ with tab_download:
         buf = io.BytesIO()
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:
             export_df.to_excel(writer, index=False, sheet_name="Top Jobs")
-        st.download_button(
-            "📥 Download as Excel (.xlsx)",
-            data      = buf.getvalue(),
-            file_name = "jobpilot_top_matches.xlsx",
-            mime      = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.download_button(
+                "📥 Download as CSV",
+                data      = export_df.to_csv(index=False).encode('utf-8'),
+                file_name = "jobpilot_top_matches.csv",
+                mime      = "text/csv",
+                use_container_width=True
+            )
+        with c2:
+            st.download_button(
+                "📥 Download as Excel",
+                data      = buf.getvalue(),
+                file_name = "jobpilot_top_matches.xlsx",
+                mime      = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
 
-        # JSON download
-        st.download_button(
-            "📥 Download as JSON",
-            data      = export_df.to_json(orient="records", indent=2),
-            file_name = "jobpilot_top_matches.json",
-            mime      = "application/json",
-        )
+        with c3:
+            st.download_button(
+                "📥 Download as JSON",
+                data      = export_df.to_json(orient="records", indent=2),
+                file_name = "jobpilot_top_matches.json",
+                mime      = "application/json",
+                use_container_width=True
+            )
     else:
         st.info("Match some jobs first (👍 or ⏭ on the Job Matches tab).")
 
