@@ -167,7 +167,14 @@ with st.sidebar:
     st.divider()
     st.markdown("## ⚙️ Preferences")
 
-    manual_background = st.text_area("✍️ Or paste Background/Resume here", placeholder="e.g. Data Analyst for 3 years, wanting to pivot to ML Engineering...")
+    manual_background = st.text_area(
+        "✍️ Background / Resume",
+        placeholder="e.g. Data Analyst for 3 years, wanting to pivot to ML Engineering...",
+    )
+    manual_preferences = st.text_area(
+        "🧭 Job Preferences",
+        placeholder="e.g. Prefer entry-to-mid ML roles, Bay Area or remote, no defense, no senior/staff roles.",
+    )
     manual_roles_str = st.text_input("🎯 Target Roles (comma-separated)", placeholder="e.g. Data Analyst, Software Engineer")
     manual_skills_str = st.text_input("🛠 Skills (comma-separated)", placeholder="e.g. Python, SQL, Machine Learning")
     location = st.text_input("📍 Preferred Location", placeholder="San Francisco, CA")
@@ -204,8 +211,12 @@ with st.sidebar:
     if custom_dbs:
         dealbreakers.extend(parse_custom_dealbreakers(custom_dbs))
 
+    combined_background = "\n".join(
+        part for part in [manual_background, manual_preferences] if part.strip()
+    )
+
     prefs = UserPreferences(
-        background    = manual_background,
+        background    = combined_background,
         location      = location,
         min_salary    = float(min_salary),
         skills        = list(set(extracted_skills)),
