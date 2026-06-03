@@ -211,6 +211,10 @@ with st.sidebar:
     )
     st.session_state.prefs = prefs
 
+    if st.button("🔍 Find Matches", type="primary", use_container_width=True):
+        st.session_state.ranked_jobs = None
+        st.rerun()
+
     st.divider()
     st.markdown("## 🔄 Live Job Streaming")
 
