@@ -303,12 +303,11 @@ def get_ranked_jobs() -> pd.DataFrame:
         profile  = st.session_state.profile
         prefs    = st.session_state.prefs
         profile_text = profile.get("raw_text", "")[:400] if profile else ""
-        target_roles = " ".join(profile.get("target_roles", [])) if profile else " ".join(prefs.target_roles)
-        skills_text  = " ".join(profile.get("skills", [])[:10]) if profile else " ".join(prefs.skills[:10])
-        
         # Target roles go FIRST and are repeated 3x to dominate the embedding.
         # This ensures FAISS retrieves what the user WANTS, not what they currently ARE.
         # Background text is truncated to 200 chars to provide context without overwhelming.
+        target_roles = " ".join(prefs.target_roles)
+        skills_text  = " ".join(prefs.skills[:10])
         bg_text = prefs.background[:200] if prefs.background else ""
         query    = " ".join([
             target_roles, target_roles, target_roles,
@@ -428,11 +427,13 @@ with tab_match:
                     gen_key = f"gen_{job_id}_{idx}"
                     if st.button("📝 Generate Resume", key=gen_key):
                         with st.spinner("Generating tailored resume with Gemini …"):
-                            actual_profile = st.session_state.profile if st.session_state.profile else {
-                                'name': 'Candidate',
-                                'raw_text': st.session_state.prefs.background if st.session_state.prefs else '',
+                            # Ensure the LLM uses all combined roles, skills, and background from prefs
+                            actual_profile = {
+                                'name': st.session_state.profile.get('name', 'Candidate') if st.session_state.profile else 'Candidate',
+                                'raw_text': (st.session_state.profile.get('raw_text', '') if st.session_state.profile else '') + "\n" + (st.session_state.prefs.background or ''),
                                 'skills': st.session_state.prefs.skills if st.session_state.prefs else [],
                                 'target_roles': st.session_state.prefs.target_roles if st.session_state.prefs else [],
+                                'dealbreakers': st.session_state.prefs.dealbreakers if st.session_state.prefs else [],
                             }
                             resume_md = resume_gen.generate_resume(
                                 actual_profile,
