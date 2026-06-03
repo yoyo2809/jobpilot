@@ -231,11 +231,12 @@ def _stage3_rerank(
     # Base explicit feedback (exact job ID match)
     fb_explicit     = df["id"].astype(str).map(feedback_scores).fillna(0.0)
     
-    # Adaptive Learning (Propagate to similar companies / titles)
+    # Adaptive Learning (Propagate to similar companies / titles / experience levels)
     # If the user liked Apple before, other Apple jobs get a slight boost.
     # If the user rejected an Analyst role, other Analyst roles get penalized.
     company_fb = {}
     title_fb = {}
+    exp_fb = {}
     
     # We need to look up the historical jobs the user gave feedback on
     if feedback_scores:
@@ -250,13 +251,19 @@ def _stage3_rerank(
             tit = str(hj.get("title", "")).lower()
             if tit:
                 title_fb[tit] = title_fb.get(tit, 0) + (score * 0.3)
+                
+            exp = str(hj.get("experience_level", "")).lower()
+            if exp and exp != "nan":
+                exp_fb[exp] = exp_fb.get(exp, 0) + (score * 0.4)
     
     def _compute_semantic_fb(row):
         base = 0.0
         c = str(row.get("company", "")).lower()
         t = str(row.get("title", "")).lower()
+        e = str(row.get("experience_level", "")).lower()
         if c in company_fb: base += company_fb[c]
         if t in title_fb: base += title_fb[t]
+        if e in exp_fb: base += exp_fb[e]
         return base
         
     fb_implicit = df.apply(_compute_semantic_fb, axis=1)
