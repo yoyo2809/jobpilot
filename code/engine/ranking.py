@@ -135,17 +135,29 @@ def _stage2_filter(
         exp_lvl = str(row.get("experience_level", "")).lower()
         skills_t = str(row.get("skills", "")).lower()
 
-        # Combine all text for dealbreaker matching
-        all_text = f"{title} {company} {work_t} {exp_lvl} {desc} {skills_t}"
+        # Combine primary text for strict dealbreaker matching
+        primary_text = f"{title} {company} {work_t} {exp_lvl}"
 
-        # Check each dealbreaker against ALL text fields
+        # Check each dealbreaker
         blocked = False
         for db_kw in prefs.dealbreakers:
             pattern = db_kw.lower()
-            if pattern in all_text:
-                removed[job_id] = f'Contains dealbreaker keyword: "{db_kw}"'
+            # If the dealbreaker is explicitly mentioned in title, company, work_type or exp_level
+            if pattern in primary_text:
+                removed[job_id] = f'Contains dealbreaker keyword in header: "{db_kw}"'
                 blocked = True
                 break
+            # For description, only block if it's explicitly stated as a requirement or level
+            # e.g., "Level: Senior" or "5+ years"
+            if pattern in desc:
+                # Be very careful with description dealbreakers to avoid false positives
+                # If the dealbreaker is a seniority level, it's safer to only trust the primary text
+                if pattern in ("senior", "junior", "staff", "principal", "entry", "associate"):
+                    continue # Ignore seniority mentions in description (e.g., "report to senior dev")
+                if pattern in desc:
+                    removed[job_id] = f'Contains dealbreaker keyword in desc: "{db_kw}"'
+                    blocked = True
+                    break
 
         if blocked:
             continue
@@ -164,6 +176,37 @@ def _stage2_filter(
             if not has_role_relevance:
                 removed[job_id] = "No relevance to target roles"
                 continue
+
+        # Visa sponsorship hard filter
+        if prefs.visa_required:
+            if "no sponsorship" in desc or "no c2c" in desc or "us citizen" in desc or "green card" in desc:
+                removed[job_id] = "Does not offer Visa sponsorship"
+                continue
+
+        # Location hard filter
+        if prefs.location:
+            pref_loc = prefs.location.lower()
+            job_loc = str(row.get("location", "")).lower()
+            is_remote = "remote" in job_loc or "remote" in work_t
+            
+            # Check if job matches preferred location
+            loc_match = False
+            if pref_loc in job_loc or job_loc in pref_loc:
+                loc_match = True
+            elif "bay area" in pref_loc:
+                bay_keywords = ["san francisco", "san jose", "palo alto", "mountain view", "sunnyvale", "santa clara", "bay area", "oakland", "cupertino", "menlo park"]
+                if any(k in job_loc for k in bay_keywords):
+                    loc_match = True
+            else:
+                pref_words = set([w for w in pref_loc.replace(",", " ").split() if len(w) > 3 and w not in ("area", "remote", "united", "states")])
+                if pref_words and any(w in job_loc for w in pref_words):
+                    loc_match = True
+                    
+            if not loc_match and not (is_remote and prefs.remote_ok):
+                # Only strictly filter if we're dealing with a real city/region, not "United States"
+                if pref_loc != "united states":
+                    removed[job_id] = f"Location mismatch ({job_loc})"
+                    continue
 
         keep.append(row)
 
@@ -284,20 +327,53 @@ def _role_match_score(row: pd.Series, target_roles: List[str]) -> float:
 def _skill_score(row: pd.Series, user_skills: List[str]) -> float:
     if not user_skills:
         return 0.5
-    job_text  = (str(row.get("skills", "")) + " " +
-                 str(row.get("description", ""))[:800]).lower()
-    matched   = sum(1 for s in user_skills if s.lower() in job_text)
-    return matched / len(user_skills)
+        
+    title = str(row.get("title", "")).lower()
+    job_skills = str(row.get("skills", "")).lower()
+    desc = str(row.get("description", "")).lower()[:500]
+    
+    text_to_search = f"{title} {job_skills} {desc}"
+    
+    hits = sum(1 for s in user_skills if s.lower() in text_to_search)
+    
+    if hits == 0:
+        return 0.1
+    if hits == 1:
+        return 0.4
+    if hits == 2:
+        return 0.7
+    if hits >= 3:
+        return 1.0
+    return 0.5
 
 
 def _location_score(row: pd.Series, prefs: UserPreferences) -> float:
     loc = str(row.get("location", "")).lower()
-    if prefs.location and prefs.location.lower() in loc:
-        return 1.0
+    
+    if prefs.location:
+        pref_loc = prefs.location.lower()
+        
+        # Exact substring match
+        if pref_loc in loc or loc in pref_loc:
+            return 1.0
+            
+        # Handle "Bay Area" specially
+        if "bay area" in pref_loc:
+            bay_keywords = ["san francisco", "san jose", "palo alto", "mountain view", "sunnyvale", "santa clara", "bay area", "oakland", "cupertino", "menlo park"]
+            if any(k in loc for k in bay_keywords):
+                return 1.0
+                
+        # Fallback to word overlap for partial matches (e.g. "San Francisco" in pref, but loc is "San Francisco, CA")
+        pref_words = set([w for w in pref_loc.replace(",", " ").split() if len(w) > 3 and w not in ("area", "remote", "united", "states")])
+        if pref_words and any(w in loc for w in pref_words):
+            return 0.85
+            
     if "remote" in loc and prefs.remote_ok:
-        return 0.85
+        return 0.80
+        
     if not prefs.location:
         return 0.5
+        
     return 0.25
 
 

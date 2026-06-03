@@ -80,24 +80,28 @@ PERSONA_QUERIES = {
         "query": "machine learning engineer Python scikit-learn data scientist applied scientist",
         "skills": ["Python", "SQL", "pandas", "scikit-learn", "PyTorch"],
         "dealbreakers": ["Senior", "Staff", "Defense"],
+        "target_roles": ["Machine Learning Engineer", "Applied Scientist", "Data Scientist"],
         "location": "United States",
     },
     "Marcus (New Grad)": {
         "query": "data analyst business intelligence junior entry level SQL Python",
         "skills": ["Python", "R", "SQL", "Tableau", "PySpark"],
         "dealbreakers": ["3+ years", "5+ years", "Contract"],
+        "target_roles": ["Data Analyst", "Business Intelligence", "Junior Analyst"],
         "location": "United States",
     },
     "Priya (Experienced Niche)": {
         "query": "MLOps engineer ML platform Kafka Spark Kubernetes senior",
         "skills": ["Java", "Python", "Kubernetes", "Kafka", "Spark", "TensorFlow", "AWS"],
         "dealbreakers": ["Junior", "Entry"],
+        "target_roles": ["MLOps Engineer", "Platform Engineer", "Senior Engineer"],
         "location": "United States",
     },
     "Kenji (International/Visa)": {
         "query": "research scientist ML engineer deep learning NLP PyTorch computer vision",
         "skills": ["Python", "C++", "PyTorch", "NLP", "Computer Vision"],
         "dealbreakers": ["Contract", "1099", "Temporary"],
+        "target_roles": ["Research Scientist", "Machine Learning Engineer"],
         "location": "United States",
         "visa_required": True,
     },
@@ -122,6 +126,7 @@ def run_benchmark(
         prefs = UserPreferences(
             location     = cfg["location"],
             skills       = cfg["skills"],
+            target_roles = cfg.get("target_roles", []),
             dealbreakers = cfg["dealbreakers"],
             visa_required = cfg.get("visa_required", False),
         )
@@ -139,6 +144,7 @@ def run_benchmark(
 
         # Define relevant set: jobs that contain at least 2 skill keywords
         relevant = _find_relevant(jobs_df, cfg["skills"], cfg["dealbreakers"])
+        print(f"[{persona}] Relevant set size: {len(relevant)}")
 
         rows.append({
             "Persona":             persona,
