@@ -22,6 +22,7 @@ from engine import database as db
 
 @dataclass
 class UserPreferences:
+    background:       str       = ""
     location:         str       = ""
     min_salary:       float     = 0.0
     target_roles:     List[str] = field(default_factory=list)

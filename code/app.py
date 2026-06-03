@@ -166,6 +166,7 @@ with st.sidebar:
     st.divider()
     st.markdown("## ⚙️ Preferences")
 
+    manual_background = st.text_area("✍️ Or paste Background/Resume here", placeholder="e.g. Data Analyst for 3 years, wanting to pivot to ML Engineering...")
     manual_roles_str = st.text_input("🎯 Target Roles (comma-separated)", placeholder="e.g. Data Analyst, Software Engineer")
     manual_skills_str = st.text_input("🛠 Skills (comma-separated)", placeholder="e.g. Python, SQL, Machine Learning")
     location = st.text_input("📍 Preferred Location", placeholder="San Francisco, CA")
@@ -199,6 +200,7 @@ with st.sidebar:
         dealbreakers.extend([d.strip() for d in custom_dbs.split(",") if d.strip()])
 
     prefs = UserPreferences(
+        background    = manual_background,
         location      = location,
         min_salary    = float(min_salary),
         skills        = list(set(extracted_skills)),
@@ -295,10 +297,15 @@ def get_ranked_jobs() -> pd.DataFrame:
     if st.session_state.ranked_jobs is None:
         profile  = st.session_state.profile
         prefs    = st.session_state.prefs
+        profile_text = profile.get("raw_text", "")[:800] if profile else ""
+        target_roles = " ".join(profile.get("target_roles", [])) if profile else " ".join(prefs.target_roles)
+        skills_text  = " ".join(profile.get("skills", [])[:10]) if profile else " ".join(prefs.skills[:10])
+        
         query    = " ".join([
-            profile.get("raw_text", "")[:800],
-            " ".join(profile.get("target_roles", [])),
-            " ".join(profile.get("skills", [])[:10]),
+            profile_text,
+            prefs.background[:800] if prefs.background else "",
+            target_roles,
+            skills_text,
         ])
         with st.spinner("🔍 Retrieving & ranking jobs …"):
             ranked = rank_jobs(
