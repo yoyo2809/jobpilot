@@ -278,9 +278,19 @@ with st.sidebar:
     col1.metric("✅ Liked",    fb_stats["accepted"])
     col2.metric("❌ Rejected", fb_stats["rejected"])
     col3.metric("⏭ Skipped",  fb_stats["skipped"])
+    if st.button("🧪 Simulate small-company rejection", use_container_width=True):
+        demo_job_id = db.find_startup_like_job_id()
+        if demo_job_id:
+            fb_engine.record(st.session_state.session_id, demo_job_id, "reject")
+            st.session_state.ranked_jobs = None
+            st.success("Added one simulated rejection for a startup-like company.")
+            st.rerun()
+        else:
+            st.warning("No startup-like job found in the local dataset.")
     if fb_stats["total"] > 0:
         st.caption(f"Ranking adapts after each reaction. "
                    f"Rejected jobs/companies are down-weighted.")
+    st.caption("Use the simulation button when no small company appears in the visible Top-10.")
 
 
 # ════════════════════════════════════════════════════════════════════════════════

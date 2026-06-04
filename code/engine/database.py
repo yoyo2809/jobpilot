@@ -7,6 +7,7 @@ import pandas as pd
 import json
 from pathlib import Path
 from datetime import datetime
+from typing import Optional
 
 DB_PATH = Path(__file__).parent.parent.parent / "data" / "jobpilot.db"
 
@@ -154,6 +155,27 @@ def save_feedback(session_id: str, job_id: str, action: str):
     )
     conn.commit()
     conn.close()
+
+
+def find_startup_like_job_id() -> Optional[str]:
+    """Return one job that looks like a tiny/startup company for demo feedback."""
+    conn = get_connection()
+    row = conn.execute(
+        """
+        SELECT id FROM jobs
+        WHERE lower(title || ' ' || company || ' ' || coalesce(description, ''))
+              LIKE '%startup%'
+           OR lower(title || ' ' || company || ' ' || coalesce(description, ''))
+              LIKE '%early-stage%'
+           OR lower(title || ' ' || company || ' ' || coalesce(description, ''))
+              LIKE '%seed%'
+           OR lower(title || ' ' || company || ' ' || coalesce(description, ''))
+              LIKE '%stealth%'
+        LIMIT 1
+        """
+    ).fetchone()
+    conn.close()
+    return str(row["id"]) if row else None
 
 
 def get_feedback(session_id: str) -> pd.DataFrame:
