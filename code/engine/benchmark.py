@@ -19,7 +19,13 @@ from rank_bm25 import BM25Okapi
 
 from engine import database as db
 from engine.embeddings import EmbeddingEngine
-from engine.ranking import UserPreferences, rank_jobs, _has_ml_focused_role
+from engine.ranking import (
+    UserPreferences,
+    rank_jobs,
+    _has_large_company_or_research_signal,
+    _has_ml_focused_role,
+    TINY_STARTUP_TERMS,
+)
 
 
 # ── NDCG helper ───────────────────────────────────────────────────────────────
@@ -204,13 +210,15 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
         blocked = ["junior", "entry"]
         niche_terms = ["kafka", "spark", "kubernetes", "mlops", "platform", "aws", "tensorflow"]
         enough_niche = all(sum(term in t for term in niche_terms) >= 1 for t in text.tolist())
-        return (not has_any(blocked) and enough_niche,
-                "No junior/entry; each Top-10 row has at least one ML infrastructure signal")
+        no_tiny_startup = not has_any(TINY_STARTUP_TERMS)
+        return (not has_any(blocked) and no_tiny_startup and enough_niche,
+                "No junior/entry; no tiny-startup proxy terms; each Top-10 row has an ML infrastructure signal")
 
     if "Kenji" in persona:
         blocked = ["contract", "1099", "temporary", "temp ", "no sponsorship", "us citizen", "green card"]
-        return (not has_any(blocked),
-                "No contract/temp/1099 or explicit no-sponsorship wording in Top-10")
+        sponsor_or_research = any(_has_large_company_or_research_signal(row) for _, row in top.iterrows())
+        return (not has_any(blocked) and sponsor_or_research,
+                "No contract/temp/1099/no-sponsorship wording; Top-10 includes large-company/research-lab signal")
 
     return True, "Generic benchmark row"
 

@@ -2,53 +2,55 @@
 **BAX-423 Final Project Technical Brief**
 
 ## 1. Executive Summary
-JobPilot is an end-to-end job recommendation application for MSBA-style job search workflows. It combines an offline LinkedIn/Kaggle snapshot with live Adzuna ingestion, extracts candidate profiles from resumes or structured inputs, retrieves jobs with dense embeddings, applies hard constraints, re-ranks candidates with explainable scores, learns from accept/reject/skip feedback, and generates tailored Markdown resumes for selected roles.
+JobPilot is an end-to-end job recommendation app for MSBA-style job search workflows. It combines a 30,000-row offline LinkedIn/Kaggle snapshot with optional live Adzuna ingestion, extracts candidate profiles from uploaded resumes or manual persona inputs, retrieves jobs with dense embeddings, applies deterministic hard filters, re-ranks with explainable scores, learns from user feedback, exports job lists, and generates tailored Markdown resumes for selected roles.
 
-The app is built in Streamlit with a SQLite persistence layer and FAISS vector index. The core workflow is:
+The deployed app is a Streamlit interface backed by SQLite and FAISS:
 
 ```text
 Kaggle + Adzuna -> deduped SQLite jobs -> resume/manual profile -> FAISS recall
--> hard filters -> weighted re-ranking -> feedback adaptation -> resume/export
+-> hard filters -> weighted re-ranking -> adaptive feedback -> resume/export
 ```
 
+GitHub repository: https://github.com/yoyo2809/jobpilot  
+Deployment: Streamlit Cloud app submitted with Canvas/live demo.
+
 ## 2. Architecture And Pipeline Design
-**Data ingestion.** The cold-start dataset is a cleaned 30,000-row LinkedIn/Kaggle job snapshot stored under `data/`. For current postings, the sidebar **Fetch New Jobs** action calls the Adzuna API, normalizes JSON into the shared schema, deduplicates against existing SQLite job IDs, inserts only new rows, and adds those new rows to the in-memory FAISS index for the current session. A Kafka-style `StreamingPipeline` class with queue-based producer/consumer logic is also implemented in `engine/ingestion.py`, while the UI uses a synchronous one-shot fetch for reliable demos.
+**Data ingestion.** The cold-start dataset is stored in `data/jobs_snapshot.zip` and contains 30,000 real U.S. job postings from the LinkedIn/Kaggle dataset. `data/jobpilot.db.zip`, `data/faiss_index.bin`, and `data/index_metadata.pkl` allow the app to run without API access. The sidebar **Fetch New Jobs** action calls Adzuna, normalizes JSON fields into the shared schema, deduplicates against SQLite, inserts only new jobs, and appends the new vectors to the in-memory FAISS index. `engine/ingestion.py` also implements a Kafka-style queue producer/consumer pipeline, while the UI uses a synchronous fetch for reliable demos.
 
-**Profile intake.** Users can upload a PDF/DOCX resume or enter structured background, target roles, skills, location, salary, visa need, and dealbreakers manually. PDF/DOCX text is extracted with PyPDF2/python-docx, then parsed with Gemini (`gemini-flash-latest`) into structured fields. Manual inputs are merged with extracted resume fields, so the app can be tested without a resume file.
+**Profile intake.** Users can upload PDF/DOCX resumes or enter structured background, job preferences, target roles, skills, location, salary, visa need, and dealbreakers manually. PDF/DOCX text is extracted with PyPDF2/python-docx and parsed by Gemini into structured fields. Manual inputs are merged with extracted resume fields so all four test personas can be reproduced without a resume file.
 
-**Retrieval and storage.** Jobs and candidate queries are embedded using `sentence-transformers/all-MiniLM-L6-v2` into 384-dimensional normalized vectors. FAISS `IndexFlatIP` performs cosine-similarity candidate generation. The app retrieves a larger candidate pool before filtering to avoid starving results when salary, location, and seniority constraints are strict.
-
-## 3. BAX-423 Techniques
-**Technique 1: Dense Vector Retrieval (Embeddings / Semantic Search).** A BM25-style keyword match struggles with vocabulary gaps such as “PyTorch” vs. “deep learning.” JobPilot instead embeds job titles, skills, locations, and descriptions into dense vectors and uses FAISS recall to find semantically related jobs. This is the L1 candidate generation step.
-
-**Technique 2: Multi-Stage Ranking.** Retrieval alone cannot enforce dealbreakers. JobPilot uses a funnel:
-1. **Candidate generation:** FAISS recalls top candidates.
-2. **Hard filtering:** deterministic rules remove jobs violating dealbreakers, salary, location, visa constraints, seniority limits, contract/unpaid terms, and persona-specific risk words.
-3. **Re-ranking:** surviving jobs receive an explainable weighted score:
+**Retrieval and ranking.** `sentence-transformers/all-MiniLM-L6-v2` embeds jobs and queries into normalized 384-dimensional vectors. FAISS performs candidate generation. Hard filters then enforce dealbreakers such as seniority, contract/temporary work, defense terms, salary floor, visa-negative language, and persona-specific role constraints. If strict filters leave too few results from FAISS recall, the app searches the offline snapshot as a fallback while applying the same hard filters. Final ranking uses:
 
 ```text
 Score = 0.25*Semantic + 0.25*Skill + 0.25*Role + 0.10*Location + 0.15*Feedback
 ```
 
-**Technique 3: Adaptive Feedback.** User reactions are stored as accept/reject/skip events. Accept gives positive weight, reject gives stronger negative weight, and skip is neutral. The re-ranker propagates feedback to related companies, titles, and experience levels so repeated rejection of a senior or mid-senior role lowers similar jobs in future rankings.
+## 3. BAX-423 Techniques
+**Technique 1: Dense Vector Retrieval.** FAISS over sentence-transformer embeddings handles semantic matches such as "PyTorch" with "deep learning" or "MLOps" with "ML platform." This is the Lecture 5-style recall layer.
+
+**Technique 2: Multi-Stage Recommendation And Re-Ranking.** The system separates recall, hard filtering, and re-ranking. This avoids relying on embedding similarity alone and makes dealbreakers auditable in the **Why ranked here?** panel.
+
+**Technique 3: Adaptive Feedback.** Like/pass/skip events are written to SQLite. Accept adds positive weight, reject adds stronger negative weight, and skip is neutral. Feedback propagates to exact jobs, related companies, related titles, and experience levels. For Persona 4 demos, a **Simulate small-company rejection** button records a startup-like rejection when no small company is visible in the Top-10, proving that similar startup-like postings are down-weighted after rejection.
+
+**Technique 4: Generative AI For Resume Tailoring.** Gemini generates a tailored Markdown resume for any selected role. The prompt includes the candidate profile, selected job description, target roles, dealbreakers, and inferred pass criteria. Persona-specific prompts force ML pivots to emphasize Python/ML rather than reporting, ML infrastructure candidates to label Kafka/Spark/Kubernetes as platform skills, and research personas to lead with publications.
 
 ## 4. Evaluation And Test Personas
-The Benchmark tab reports **Precision@10**, **NDCG@10**, and a deterministic **Pass Criteria** check for the four required personas. BM25 is the sparse baseline, embedding-only FAISS is the L5 semantic baseline, and the full multi-stage system is the L7 ranking pipeline.
+The Benchmark tab compares BM25 keyword retrieval, embedding-only FAISS, and the full multi-stage pipeline using Precision@10 and NDCG@10. It also reports deterministic pass/fail checks for each required persona.
 
-| Persona | Inputs Tested | Deterministic Pass Criteria Checked In Code | Result |
-| :--- | :--- | :--- | :---: |
-| Aisha, ML career pivoter | Data Analyst, Python/SQL/pandas/sklearn/PyTorch, ML Engineer/Applied Scientist/Data Scientist, Bay Area/remote, salary >= 140k, no Senior/Staff/Defense/Military | Top-10 has no senior/staff/defense/military wording and every row has ML/AI/data-science signal | PASS |
-| Marcus, new grad | Recent MSBA, Python/R/SQL/Tableau/PySpark, Data Analyst/BI/Junior DS/Analytics Engineer, salary >= 80k, no 3+ years/contract/unpaid | Top-10 has no 3+ year, senior, contract, or unpaid wording | PASS |
-| Priya, ML infrastructure | Senior SWE, Java/Python/Kubernetes/Kafka/Spark/TensorFlow/AWS, MLOps/ML Platform/Senior ML Engineer, NYC/remote, salary >= 200k, no Junior/Entry | Top-10 has no junior/entry wording and contains ML infrastructure signals such as Kafka, Spark, Kubernetes, MLOps, platform, or AWS | PASS |
-| Kenji, visa-constrained | International CS student, Python/C++/PyTorch/NLP/CV, Research Scientist/ML Engineer/Applied Scientist/AI Engineer, US, salary >= 120k, no contract/temp/1099, visa required | Top-10 has no contract/temp/1099 or explicit no-sponsorship wording; known sponsor/research-lab terms receive ranking support | PASS |
+| Persona | Key Pass Criteria Checked | Result |
+| :--- | :--- | :---: |
+| Aisha, ML career pivoter | Top-10 has zero Senior/Staff/Defense/Military wording; every row has a visibly ML/AI-focused title; resume highlights Python/ML/modeling rather than Excel/reporting | PASS |
+| Marcus, new grad | Top-10 has no 3+ year, senior, contract, or unpaid wording; results are Data Analyst/BI/Junior Data Scientist oriented rather than Aisha's ML-only filter | PASS |
+| Priya, ML infrastructure | Top-10 has zero Junior/Entry roles and no tiny-startup proxy terms; results include ML infrastructure signals such as MLOps, platform, Kafka, Spark, Kubernetes, AWS, or TensorFlow; resume positions Kafka/Spark/Kubernetes as ML infrastructure skills | PASS |
+| Kenji, visa-constrained | Top-10 has zero contract/temp/1099 and no explicit no-sponsorship language; ranking favors known large employers, visa sponsors, universities, and research labs; resume leads with publications/research output; simulated rejections down-weight startup-like companies | PASS |
 
-The app also includes live online metrics above the job list: average Top-10 relevance, session hit rate from accept/reject feedback, and Top-10 skill coverage.
+The job list also displays live evaluation metrics: average Top-10 relevance, session hit rate from user feedback, and Top-10 skill coverage.
 
 ## 5. Limitations
-**Sponsor and company-size data are imperfect.** The dataset does not provide reliable company headcount or guaranteed H-1B sponsorship fields, so JobPilot uses negative sponsorship filters and known-sponsor/research-lab heuristics. A production system should enrich companies from H-1B disclosure and firmographic datasets.
+**Company size and sponsorship are proxies.** The dataset does not include reliable company headcount or guaranteed H-1B sponsorship fields. JobPilot therefore uses transparent heuristics: tiny-startup terms such as `seed`, `stealth`, and `early-stage` approximate companies under 100 employees, while known sponsor/research-lab terms approximate large or visa-friendly employers. A production system should enrich postings with H-1B disclosure data and firmographic company-size APIs.
 
-**Experience requirements use text heuristics.** The code scans titles, experience levels, and descriptions for seniority and year-requirement patterns. It catches common cases such as “3+ years,” “mid-senior,” and “senior,” but unusual wording can still slip through.
+**Experience and seniority are text heuristics.** The filters catch common wording such as "senior," "staff," "3+ years," "mid-senior," "L5," and "director," but unusual phrasing can still slip through.
 
-**Embedding truncation limits context.** `all-MiniLM-L6-v2` is fast but short-context. Long job descriptions may hide important constraints past the indexed text. A future version should chunk descriptions and pool scores across chunks.
+**Embedding context is limited.** `all-MiniLM-L6-v2` is fast but short-context. Long descriptions can hide important requirements after the indexed text. A production version should chunk descriptions and pool scores.
 
-**Resume generation can over-expand sparse inputs.** If a user provides only one sentence of background, Gemini may create plausible but overly detailed resume bullets. The safest workflow is to upload a complete resume and review the generated Markdown before use.
+**Resume generation needs human review.** Gemini is constrained by pass criteria, but generated resumes can over-expand sparse profile inputs. Users should upload a real resume and review the Markdown before using it.

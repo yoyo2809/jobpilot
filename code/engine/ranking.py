@@ -117,6 +117,13 @@ def rank_jobs(
     # Stage 2 — hard filter
     filtered, filter_reasons = _stage2_filter(candidates, prefs)
 
+    # If FAISS recall misses too many strict-but-valid jobs, broaden to the
+    # offline snapshot while keeping exactly the same hard filters.
+    if len(filtered) < top_n:
+        fallback = _fallback_candidates(candidates, filtered, prefs)
+        if not fallback.empty:
+            filtered = pd.concat([filtered, fallback], ignore_index=True)
+
     # Stage 3 — re-rank
     feedback_scores = _load_feedback_scores(session_id)
     ranked = _stage3_rerank(filtered, prefs, feedback_scores)
@@ -142,6 +149,28 @@ def _stage1_recall(
     jobs_df  = db.get_jobs_by_ids(job_ids)
     jobs_df["embedding_score"] = jobs_df["id"].astype(str).map(emb_map).fillna(0)
     return jobs_df
+
+
+def _fallback_candidates(
+    candidates: pd.DataFrame,
+    filtered: pd.DataFrame,
+    prefs: UserPreferences,
+) -> pd.DataFrame:
+    """Search the full offline snapshot when strict filters starve FAISS recall."""
+    all_jobs = db.get_analytics_data()
+    if all_jobs.empty:
+        return pd.DataFrame()
+
+    seen_ids = set(candidates.get("id", pd.Series(dtype=str)).astype(str))
+    if not filtered.empty:
+        seen_ids.update(filtered["id"].astype(str))
+    all_jobs = all_jobs[~all_jobs["id"].astype(str).isin(seen_ids)].copy()
+    if all_jobs.empty:
+        return pd.DataFrame()
+
+    all_jobs["embedding_score"] = 0.35
+    fallback, _ = _stage2_filter(all_jobs, prefs)
+    return fallback.head(200)
 
 
 # ── Stage 2: Hard Filter ──────────────────────────────────────────────────────
@@ -204,6 +233,16 @@ def _stage2_filter(
         if not blocked and any(d.lower() in ("defense", "defence", "military") for d in prefs.dealbreakers):
             if any(term in full_text for term in DEFENSE_COMPANY_TERMS):
                 removed[job_id] = "Likely defense/military company"
+                blocked = True
+
+        if not blocked and any(d.lower() in ("senior", "staff", "principal", "director", "vp") for d in prefs.dealbreakers):
+            senior_markers = [
+                "mid-senior", "senior", "sr.", "staff", "principal",
+                "lead ", "director", "manager", "executive", "distinguished",
+                "leader", "architect", "head of", " l5", "level 5", " l6", "level 6",
+            ]
+            if any(marker in full_text for marker in senior_markers):
+                removed[job_id] = "Too senior for persona"
                 blocked = True
 
         if not blocked and new_grad_mode:
@@ -709,7 +748,11 @@ def evaluate_pass_criteria(row: pd.Series, prefs: UserPreferences) -> List[tuple
 
     dealbreakers = [d.lower() for d in prefs.dealbreakers]
     if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
-        senior_terms = ["senior", "sr.", "staff", "principal", "director", "vp", "lead "]
+        senior_terms = [
+            "mid-senior", "senior", "sr.", "staff", "principal",
+            "lead ", "director", "manager", "executive", "distinguished",
+            "leader", "architect", "head of", " l5", "level 5", " l6", "level 6",
+        ]
         checks.append(("No Senior/Staff-level signal", not any(term in text for term in senior_terms)))
     if any(d in ("junior", "entry", "entry level", "internship") for d in dealbreakers):
         junior_terms = ["junior", "jr.", "entry", "entry level", "intern", "internship", "new grad"]

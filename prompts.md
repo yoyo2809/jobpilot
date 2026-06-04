@@ -1,14 +1,13 @@
 # prompts.md — Key AI Prompts Used in JobPilot
 
 > BAX-423 Final Project · Option B · JobPilot  
-> AI tools used: Google Gemini 1.5 Flash (via API), Antigravity IDE (Claude Sonnet)
-
----
+> AI tools used: Google Gemini via API, ChatGPT/Codex for implementation review and debugging.
 
 ## 1. Resume / Profile Extraction
 
-**Prompt** (used in `engine/profile.py`):
-```
+Prompt used in `code/engine/profile.py`:
+
+```text
 You are a resume parser. Extract structured information from the resume below.
 
 Return ONLY valid JSON with exactly these fields:
@@ -27,15 +26,15 @@ Resume:
 {resume_text}
 ```
 
-**Purpose**: Convert unstructured PDF/DOCX text into a structured profile dict for skill matching and ranking.  
-**Modification**: Truncated resume to 4000 characters; added JSON fence-stripping to handle markdown code blocks in Gemini output.
+Purpose: convert unstructured PDF/DOCX text into a structured profile used by ranking and resume generation.
 
----
+Key modifications: resume text is truncated to 4000 characters, markdown JSON fences are stripped, and a basic regex fallback extracts common skills when Gemini fails.
 
 ## 2. Tailored Resume Generation
 
-**Prompt** (used in `engine/resume_gen.py`):
-```
+Prompt used in `code/engine/resume_gen.py`:
+
+```text
 You are an expert resume writer and career coach.
 
 Given the candidate's profile and the specific job description, write a complete,
@@ -48,59 +47,95 @@ Rules:
 - List top 6-8 relevant skills first.
 - Use strong action verbs and quantify achievements where possible.
 - Do NOT invent qualifications the candidate doesn't have.
+- Omit irrelevant or basic skills (e.g., Excel, reporting) if the target role is advanced.
+- Must satisfy the Pass Criteria below.
+- If the Pass Criteria mention ML infrastructure, the Top Skills section MUST contain
+  a bullet titled exactly "ML Infrastructure & Platform Engineering".
+- If the Pass Criteria mention publications, the first major section after Professional
+  Summary MUST be "Selected Publications & Research".
 
 Candidate Profile:
 {profile_summary}
 
+Pass Criteria:
+{pass_criteria}
+
 Target Job:
 Title: {job_title}
 Company: {company}
-...
+Location: {location}
+Description:
+{job_description}
 ```
 
-**Purpose**: Generate a role-specific tailored resume that matches the job description language (ATS optimisation).  
-**Modification**: Added explicit rule "Do NOT invent qualifications" to prevent hallucination; limited job description to 3000 chars to stay within token limits.
+Purpose: generate a role-specific Markdown resume using the selected job description plus the current persona constraints.
 
----
+Key modifications:
+- Aisha: resume must highlight Python/ML/modeling and not lead with Excel/reporting.
+- Priya: Kafka, Spark, Kubernetes, AWS, and TensorFlow are positioned as ML infrastructure / ML platform engineering skills.
+- Kenji: publications/research output must appear immediately after the professional summary.
+- Dealbreakers are passed into the prompt so the resume does not frame the candidate toward contract, defense, or seniority-mismatched roles.
 
-## 3. Cover Letter Generation (Bonus)
+## 3. Ranking And Recommendation Design Prompts
 
-**Prompt** (used in `engine/resume_gen.py`):
+Implementation prompts used during development:
+
+```text
+Build a multi-stage ranking pipeline using embedding retrieval and re-ranking.
+Stage 1: FAISS recall over job postings.
+Stage 2: deterministic hard filters for dealbreakers, salary, seniority, visa constraints,
+contract/temp terms, and persona-specific pass criteria.
+Stage 3: weighted scoring combining semantic similarity, skill overlap, role match,
+location preference, and adaptive feedback.
 ```
-Write a concise, compelling cover letter (3 paragraphs) for:
-Candidate: {name}
-Skills: {skills}
-Applying to: {title} at {company}
-Description: {description}
+
+Current scoring weights:
+
+```text
+Score = 0.25*Embedding + 0.25*Skill + 0.25*Role + 0.10*Location + 0.15*Feedback
 ```
 
-**Purpose**: Bonus feature — generates a 3-paragraph cover letter alongside the resume.  
-**Modification**: Added "3 paragraphs" constraint to keep it concise.
+Purpose: implement Lecture 5 dense retrieval and Lecture 7 multi-stage recommendation.
 
----
+Important modifications after testing:
+- Added strict ML-only title filtering for the Aisha persona.
+- Separated Data Analyst/BI/New Grad personas from ML-only filtering.
+- Added a fallback over the offline snapshot when strict hard filters starve FAISS recall.
+- Added transparent company-size proxy logic because the dataset has no real headcount field.
+- Added known sponsor / research-lab soft signals for the visa-constrained persona.
 
-## 4. Development Assistance (Antigravity IDE)
+## 4. Streaming Ingestion Prompt
 
-**Prompts used for code generation**:
+```text
+Create a streaming ingestion module that simulates a Kafka producer/consumer
+using Python's threading.Queue. The producer fetches from Adzuna. The consumer
+deduplicates against SQLite and inserts only new jobs.
+```
 
-- *"Build a multi-stage ranking pipeline using Lecture 5 embeddings and Lecture 7 re-ranking. Stage 1: FAISS recall. Stage 2: hard dealbreaker filter. Stage 3: weighted score combining embedding similarity, skill overlap, location match, and adaptive feedback."*  
-  **Purpose**: Generated the core `engine/ranking.py` module.
+Purpose: satisfy the live/current job ingestion requirement while keeping the demo reliable. The UI uses a one-shot Adzuna fetch button and the module also contains a Kafka-style queue pipeline.
 
-- *"Create a streaming ingestion module that simulates Kafka producer/consumer using Python's threading.Queue. Producer fetches from Adzuna API. Consumer deduplicates and inserts into SQLite."*  
-  **Purpose**: Generated `engine/ingestion.py`.
+## 5. Benchmark Prompt
 
-- *"Write a benchmark that compares BM25 baseline vs sentence-embedding FAISS retrieval vs multi-stage re-ranking using NDCG@10 and Precision@10 across 4 test personas."*  
-  **Purpose**: Generated `engine/benchmark.py`.
+```text
+Write a benchmark comparing BM25 keyword retrieval, sentence-transformer FAISS retrieval,
+and the full multi-stage recommender. Use Precision@10 and NDCG@10 across the four
+required personas, and include deterministic pass/fail checks for each persona's rubric.
+```
 
-- *"Design a Streamlit app with dark sidebar, job cards with match score badges, like/pass/skip feedback buttons, explain expander, and generate resume action."*  
-  **Purpose**: Generated `app.py` UI layout and custom CSS.
+Purpose: show the impact of course techniques and produce a pass/fail table for the technical brief.
 
----
+## 6. AI-Assisted Debugging Prompts
 
-## Notes on AI Tool Usage
+Prompts used during final review included:
 
-All AI-generated code was reviewed, tested, and modified before use. Key modifications:
-- Fixed FAISS index loading/saving to handle cold-start (no pre-built index)
-- Adjusted ranking weights (40/30/15/15) based on experimentation with test personas
-- Added error handling for Gemini API failures with graceful fallbacks
-- Fixed SQLite thread safety (`check_same_thread=False`)
+```text
+Audit the project against the final exam requirements. Identify mismatches between
+the pass criteria, Streamlit UI, technical brief, benchmark checks, and implementation.
+```
+
+```text
+For each test persona, inspect whether Top-10 recommendations satisfy the stated
+pass criteria and modify ranking/resume generation without breaking the other personas.
+```
+
+Purpose: align the final code, benchmark, explanations, prompt constraints, and documentation before submission.

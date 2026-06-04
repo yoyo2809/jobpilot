@@ -368,7 +368,7 @@ def get_ranked_jobs() -> pd.DataFrame:
                 prefs        = prefs,
                 embedding_engine = engine,
                 session_id   = st.session_state.session_id,
-                top_n        = 20,
+                top_n        = 10,
             )
         st.session_state.ranked_jobs = ranked
     return st.session_state.ranked_jobs
