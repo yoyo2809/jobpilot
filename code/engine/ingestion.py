@@ -27,8 +27,11 @@ ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs"
 
 
 def _adzuna_creds() -> tuple[str, str]:
-    app_id  = st.secrets.get("ADZUNA_APP_ID", "")
-    app_key = st.secrets.get("ADZUNA_APP_KEY", "")
+    try:
+        app_id  = st.secrets.get("ADZUNA_APP_ID", "")
+        app_key = st.secrets.get("ADZUNA_APP_KEY", "")
+    except Exception:
+        return "", ""
     return app_id, app_key
 
 
