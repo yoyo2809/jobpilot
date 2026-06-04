@@ -23,6 +23,7 @@ Rules:
 - Do NOT invent qualifications the candidate doesn't have.
 - Omit irrelevant or basic skills (e.g., Excel, reporting) if the target role is advanced (e.g., ML/Data Science).
 - Must satisfy the Pass Criteria below. If the criteria mention ML, emphasize Python, ML, modeling, scikit-learn, data pipelines, and learning trajectory.
+- If the Pass Criteria mention ML infrastructure, the Top Skills section MUST contain a bullet titled exactly "ML Infrastructure & Platform Engineering".
 - Do not lead with Excel, dashboards, reporting, Tableau, or generic business analysis when the pass criteria require ML.
 - Format with proper Markdown headers (# for name, ## for sections).
 
@@ -115,7 +116,8 @@ def _format_pass_criteria(profile: dict) -> str:
     ).lower()
     infra_skills = [skill for skill in ["Kafka", "Spark", "Kubernetes", "AWS", "TensorFlow"] if skill.lower() in profile_text]
     if infra_mode and infra_skills:
-        criteria.append(f"- Position {', '.join(infra_skills)} as ML infrastructure / ML platform engineering skills.")
+        criteria.append(f"- Top Skills must include: ML Infrastructure & Platform Engineering: {', '.join(infra_skills)}.")
+        criteria.append(f"- Position {', '.join(infra_skills)} as ML infrastructure / ML platform engineering skills, not generic backend or data tooling.")
         criteria.append("- Emphasize production systems, data pipelines, model-serving platforms, reliability, and cross-functional engineering impact.")
 
     if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
