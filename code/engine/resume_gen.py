@@ -24,6 +24,7 @@ Rules:
 - Omit irrelevant or basic skills (e.g., Excel, reporting) if the target role is advanced (e.g., ML/Data Science).
 - Must satisfy the Pass Criteria below. If the criteria mention ML, emphasize Python, ML, modeling, scikit-learn, data pipelines, and learning trajectory.
 - If the Pass Criteria mention ML infrastructure, the Top Skills section MUST contain a bullet titled exactly "ML Infrastructure & Platform Engineering".
+- If the Pass Criteria mention publications, the first major section after Professional Summary MUST be "Selected Publications & Research".
 - Do not lead with Excel, dashboards, reporting, Tableau, or generic business analysis when the pass criteria require ML.
 - Format with proper Markdown headers (# for name, ## for sections).
 
@@ -119,6 +120,10 @@ def _format_pass_criteria(profile: dict) -> str:
         criteria.append(f"- Top Skills must include: ML Infrastructure & Platform Engineering: {', '.join(infra_skills)}.")
         criteria.append(f"- Position {', '.join(infra_skills)} as ML infrastructure / ML platform engineering skills, not generic backend or data tooling.")
         criteria.append("- Emphasize production systems, data pipelines, model-serving platforms, reliability, and cross-functional engineering impact.")
+
+    if "published research" in profile_text or "publication" in profile_text or "publications" in profile_text:
+        criteria.append("- Resume must lead with a Selected Publications & Research section immediately after the Professional Summary.")
+        criteria.append("- Emphasize papers, research projects, methods, datasets, and measurable research outcomes before general work experience.")
 
     if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
         criteria.append("- Tone should fit entry-to-mid level roles, not senior/staff leadership roles.")

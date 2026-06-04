@@ -83,6 +83,11 @@ TINY_STARTUP_TERMS = [
     "small startup", "startup",
 ]
 
+RESEARCH_LAB_TERMS = [
+    "research lab", "university", "institute", "deepmind", "openai",
+    "anthropic", "research scientist", "ai research", "published research",
+]
+
 EXPERIENCE_RE = re.compile(
     r"\b(?:[3-9]|1[0-9])\s*\+?\s*(?:years?|yrs?)\b|"
     r"\b(?:three|four|five|six|seven|eight|nine|ten)\s*\+?\s*(?:years?|yrs?)\b|"
@@ -293,6 +298,7 @@ def _stage3_rerank(
     company_fb = {}
     title_fb = {}
     exp_fb = {}
+    rejected_tiny_company = False
     
     # We need to look up the historical jobs the user gave feedback on
     if feedback_scores:
@@ -301,6 +307,13 @@ def _stage3_rerank(
             hid = str(hj["id"])
             score = feedback_scores.get(hid, 0)
             comp = str(hj.get("company", "")).lower()
+            hist_text = (
+                str(hj.get("title", "")) + " " +
+                str(hj.get("company", "")) + " " +
+                str(hj.get("description", ""))[:800]
+            ).lower()
+            if score < 0 and any(term in hist_text for term in TINY_STARTUP_TERMS):
+                rejected_tiny_company = True
             if comp:
                 company_fb[comp] = company_fb.get(comp, 0) + (score * 0.5) # 50% propagation
                 
@@ -317,9 +330,12 @@ def _stage3_rerank(
         c = str(row.get("company", "")).lower()
         t = str(row.get("title", "")).lower()
         e = str(row.get("experience_level", "")).lower()
+        text = f"{t} {c} {str(row.get('description', '')).lower()[:800]}"
         if c in company_fb: base += company_fb[c]
         if t in title_fb: base += title_fb[t]
         if e in exp_fb: base += exp_fb[e]
+        if rejected_tiny_company and any(term in text for term in TINY_STARTUP_TERMS):
+            base -= 0.6
         return base
         
     fb_implicit = df.apply(_compute_semantic_fb, axis=1)
@@ -614,7 +630,7 @@ def _location_score(row: pd.Series, prefs: UserPreferences) -> float:
     if prefs.visa_required:
         company = str(row.get("company", "")).lower()
         desc = str(row.get("description", "")).lower()[:1200]
-        if any(term in company or term in desc for term in KNOWN_H1B_SPONSOR_TERMS):
+        if _has_large_company_or_research_signal(row):
             return max(0.75, 0.5 if not prefs.location else 0.25)
         
     if not prefs.location:
@@ -628,6 +644,15 @@ def _to_float(val) -> Optional[float]:
         return float(val)
     except (TypeError, ValueError):
         return None
+
+
+def _has_large_company_or_research_signal(row: pd.Series) -> bool:
+    """Soft proxy for large employers/research labs; no company-size field exists."""
+    company = str(row.get("company", "")).lower()
+    desc = str(row.get("description", "")).lower()[:1200]
+    title = str(row.get("title", "")).lower()
+    text = f"{title} {company} {desc}"
+    return any(term in text for term in KNOWN_H1B_SPONSOR_TERMS + RESEARCH_LAB_TERMS)
 
 
 def describe_pass_criteria(prefs: UserPreferences) -> List[str]:
@@ -651,6 +676,11 @@ def describe_pass_criteria(prefs: UserPreferences) -> List[str]:
         criteria.append("Exclude defense or military companies/roles.")
     if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
         criteria.append("Exclude contract, temporary, 1099, or unpaid roles.")
+    if prefs.visa_required:
+        criteria.append("Favor large companies / known visa sponsors / research labs using company-name and description signals.")
+        criteria.append("Adaptive learning down-weights tiny-startup-like companies after startup rejections.")
+    if "published research" in background or "publication" in background:
+        criteria.append("Resume should lead with publications/research output.")
     if any(d in ("3+ years", "5+ years", "7+ years", "10+ years") for d in dealbreakers):
         criteria.append("Exclude roles requiring more experience than the persona allows.")
     if "new grad" in background or "recent graduate" in background:
@@ -690,6 +720,8 @@ def evaluate_pass_criteria(row: pd.Series, prefs: UserPreferences) -> List[tuple
         checks.append(("No defense/military signal", not any(term in text for term in DEFENSE_COMPANY_TERMS + ["defense", "defence", "military"])))
     if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
         checks.append(("No contract/temp/unpaid signal", not any(term in text for term in ["contract", "1099", "temporary", "temp ", "unpaid"])))
+    if prefs.visa_required:
+        checks.append(("Large company / research lab / visa-sponsor signal", _has_large_company_or_research_signal(row)))
     if any(d in ("3+ years", "5+ years", "7+ years", "10+ years") for d in dealbreakers):
         checks.append(("Experience requirement is not too high", not EXPERIENCE_RE.search(text)))
 
