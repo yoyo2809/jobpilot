@@ -646,7 +646,7 @@ def describe_pass_criteria(prefs: UserPreferences) -> List[str]:
     if any(d in ("junior", "entry", "entry level", "internship") for d in dealbreakers):
         criteria.append("Top-10 must have zero Junior/Entry-level roles.")
     if _is_company_size_mode(prefs):
-        criteria.append("Top-10 must have zero tiny startups.")
+        criteria.append("No companies with <100 employees, approximated by filtering tiny-startup signals because the dataset has no company-size field.")
     if any(d in ("defense", "defence", "military") for d in dealbreakers):
         criteria.append("Exclude defense or military companies/roles.")
     if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):
@@ -685,7 +685,7 @@ def evaluate_pass_criteria(row: pd.Series, prefs: UserPreferences) -> List[tuple
         junior_terms = ["junior", "jr.", "entry", "entry level", "intern", "internship", "new grad"]
         checks.append(("No Junior/Entry-level signal", not any(term in text for term in junior_terms)))
     if _is_company_size_mode(prefs):
-        checks.append(("No tiny-startup signal", not any(term in text for term in TINY_STARTUP_TERMS)))
+        checks.append(("No tiny-startup signal (<100 employees proxy)", not any(term in text for term in TINY_STARTUP_TERMS)))
     if any(d in ("defense", "defence", "military") for d in dealbreakers):
         checks.append(("No defense/military signal", not any(term in text for term in DEFENSE_COMPANY_TERMS + ["defense", "defence", "military"])))
     if any(d in ("contract", "1099", "temporary", "temp", "unpaid") for d in dealbreakers):

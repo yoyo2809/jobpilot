@@ -104,6 +104,20 @@ def _format_pass_criteria(profile: dict) -> str:
         criteria.append("- Resume does not lead with Excel, dashboarding, reporting, or generic analyst work.")
         criteria.append("- Summary positions the candidate as pivoting toward ML engineering without inventing production ML experience.")
 
+    infra_mode = any(term in target_roles for term in [
+        "mlops", "platform engineer", "ml platform", "machine learning platform",
+        "infrastructure", "senior engineer",
+    ])
+    profile_text = (
+        " ".join(profile.get("skills", [])) + " " +
+        " ".join(profile.get("target_roles", [])) + " " +
+        str(profile.get("raw_text", ""))
+    ).lower()
+    infra_skills = [skill for skill in ["Kafka", "Spark", "Kubernetes", "AWS", "TensorFlow"] if skill.lower() in profile_text]
+    if infra_mode and infra_skills:
+        criteria.append(f"- Position {', '.join(infra_skills)} as ML infrastructure / ML platform engineering skills.")
+        criteria.append("- Emphasize production systems, data pipelines, model-serving platforms, reliability, and cross-functional engineering impact.")
+
     if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
         criteria.append("- Tone should fit entry-to-mid level roles, not senior/staff leadership roles.")
     if any(d in ("defense", "defence", "military") for d in dealbreakers):
