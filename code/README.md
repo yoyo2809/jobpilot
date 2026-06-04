@@ -34,6 +34,12 @@ If `data/jobs_snapshot.csv` is missing or corrupted, `scripts/build_index.py` au
 
 ## Streamlit Cloud
 
+Live app:
+
+```text
+https://jobpilot-evj8gpsfhjxmmav2ugmbdb.streamlit.app/
+```
+
 Deploy from the GitHub repo with:
 
 ```text
@@ -41,6 +47,8 @@ Main file path: code/app.py
 ```
 
 Add the same three secrets in Streamlit Cloud settings.
+
+The offline matching demo works from the included SQLite and FAISS artifacts. `GEMINI_API_KEY` is required for resume parsing and resume generation. `ADZUNA_APP_ID` and `ADZUNA_APP_KEY` are required only for **Fetch New Jobs** live ingestion.
 
 ## What To Verify
 
