@@ -125,6 +125,13 @@ def _format_pass_criteria(profile: dict) -> str:
         criteria.append("- Resume must lead with a Selected Publications & Research section immediately after the Professional Summary.")
         criteria.append("- Emphasize papers, research projects, methods, datasets, and measurable research outcomes before general work experience.")
 
+    # New-grad detection: if background mentions no work experience or recent graduate,
+    # the resume MUST lead with Education before any Work Experience section.
+    new_grad_phrases = ["no full-time experience", "new grad", "recent graduate", "recent msba", "graduating"]
+    if any(phrase in profile_text for phrase in new_grad_phrases):
+        criteria.append("- The resume MUST place the Education section (degree, university, GPA, coursework) BEFORE any Work Experience or Professional Experience section.")
+        criteria.append("- Lead with academic credentials and relevant coursework/projects, not work history, since the candidate is a new graduate.")
+
     if any(d in ("senior", "staff", "principal", "director", "vp") for d in dealbreakers):
         criteria.append("- Tone should fit entry-to-mid level roles, not senior/staff leadership roles.")
     if any(d in ("defense", "defence", "military") for d in dealbreakers):
