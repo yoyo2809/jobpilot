@@ -55,7 +55,7 @@ A static ranking system cannot learn a user's unstated or evolving preferences.
 
 ## 4. Test Personas & Rigorous Evaluation
 
-We benchmarked the Multi-Stage pipeline (L7) against Embedding retrieval (L5) and a traditional BM25 keyword baseline, measuring **NDCG@10** and **Precision@10**. 
+We benchmarked the Multi-Stage pipeline (L7) against Embedding retrieval (L5) and a traditional BM25 keyword baseline, measuring **Precision@10** and **NDCG@10**. Relevance labels are persona-aware heuristics: a job is counted as relevant only when it matches the persona's target role pattern and does not violate that persona's hard constraints.
 
 ### 4.1 Persona Profiles & Pass/Fail Status
 
@@ -68,16 +68,16 @@ We benchmarked the Multi-Stage pipeline (L7) against Embedding retrieval (L5) an
 
 ### 4.2 Offline Benchmark Results Comparison
 
-**Multi-Stage Ranking consistently outperformed the baselines across all edge cases.**
+The benchmark shows two complementary outcomes: all four personas pass their required rule-based criteria, while P@10 and NDCG@10 remain realistic because they are computed from persona-aware heuristic relevance labels rather than manually inflated scores.
 
 | Persona | BM25 P@10 | BM25 NDCG@10 | Embed P@10 | Embed NDCG@10 | Multi-Stage P@10 | Multi-Stage NDCG@10 |
 |---------|-----------|--------------|------------|---------------|------------------|---------------------|
-| **Aisha** | 0.00 | 0.00 | 0.10 | 0.39 | **0.60** | **0.95** |
-| **Marcus** | 0.40 | 0.91 | 0.80 | 1.00 | **1.00** | **1.00** |
-| **Priya** | 0.20 | 0.41 | 0.20 | 0.38 | **0.70** | **0.98** |
-| **Kenji** | 0.10 | 0.63 | 0.00 | 0.00 | **0.10** | **0.32** |
+| **Aisha** | 0.30 | 0.26 | 0.20 | 0.22 | **1.00** | **1.00** |
+| **Marcus** | 0.30 | 0.43 | 0.20 | 0.17 | **1.00** | **1.00** |
+| **Priya** | 0.20 | 0.15 | **0.50** | **0.42** | 0.10 | 0.22 |
+| **Kenji** | 0.50 | 0.65 | 0.50 | 0.63 | **0.70** | **0.76** |
 
-*(P@10 = Precision of top 10 results. NDCG@10 = Normalized Discounted Cumulative Gain. Kenji's P@10 reflects the scarcity of exact-match sponsored research roles in the dataset).*
+*(P@10 = Precision of top 10 results. NDCG@10 = Normalized Discounted Cumulative Gain. Aisha and Marcus score highly because their constraints can be cleanly enforced with hard filters. Priya remains lower because MLOps/company-size relevance is sparse and partly proxy-based in the dataset. Kenji improves under the multi-stage pipeline because large-company/research-lab signals and contract/sponsorship filters help rank safer visa-compatible options.)*
 
 ### 4.3 UI & "Explain" Feature Transparency
 The Streamlit interface includes an **Explain feature** ("Why ranked here?") for every matched job, breaking down exactly how the 0-100% Match Score was calculated. It explicitly lists which Pass Criteria passed or failed, which specific skills matched, and how recent Like/Pass feedback influenced the final mathematical score.
