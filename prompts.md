@@ -139,3 +139,91 @@ pass criteria and modify ranking/resume generation without breaking the other pe
 ```
 
 Purpose: align the final code, benchmark, explanations, prompt constraints, and documentation before submission.
+
+## 7. Persona-Specific Refinement Prompts
+
+Prompts used to tighten the four required persona demos:
+
+```text
+Review Persona 1 Aisha against this pass criteria:
+Top-10 has zero Senior/Staff roles, zero defense companies, and all jobs are ML-related.
+Identify why generic Software Engineer, DataAnnotation, senior, staff, principal, director,
+lead, manager, L5/L6, defense, military, or clearance-related jobs might still appear.
+Modify the hard filters and role relevance logic so Aisha's Top-10 remains ML-focused
+without breaking non-ML personas.
+```
+
+Purpose: force Aisha's career-pivot recommendations to satisfy the ML-only and no-senior constraints.
+
+```text
+Review Persona 2 Marcus as a new MSBA graduate.
+The previous test was still returning ML-focused results after changing the inputs.
+Find any caching or preference-signature issue that could preserve stale rankings.
+Ensure Marcus sees Data Analyst, BI Analyst, Junior Data Scientist, or Analytics Engineer
+roles and excludes 3+ years, 5+ years, senior, contract-only, and unpaid jobs.
+The generated resume should lead with MSBA education and projects, not full-time work history.
+```
+
+Purpose: separate the broad new-grad search from Aisha's ML-only filter and enforce education-first resume generation.
+
+```text
+Review Persona 3 Priya:
+Top-10 must have zero Junior roles and zero tiny startups.
+Because the dataset has no structured employee-count field, propose transparent proxy
+rules for company-size constraints. Also ensure the generated resume positions Kafka,
+Spark, Kubernetes, AWS, and TensorFlow as ML infrastructure / ML platform skills rather
+than generic backend skills.
+```
+
+Purpose: document the company-size proxy design and improve ML infrastructure framing.
+
+```text
+Review Persona 4 Kenji:
+Top-10 must have zero contract/temp/1099 roles, should favor large companies or research labs,
+and resume generation should lead with publications. The dataset lacks guaranteed H-1B
+sponsorship fields, so design honest proxy logic using explicit no-sponsorship language,
+known large employers, universities, and research-lab terms. Also add a demo mechanism
+to show small-company rejection feedback when no small company appears in the visible Top-10.
+```
+
+Purpose: make the visa-constrained demo transparent about sponsorship proxies while still satisfying the rubric behavior.
+
+## 8. Final Submission Audit And Packaging Prompts
+
+Prompts used during the final pre-submission review:
+
+```text
+Read the final exam PDF, the JobPilot project brief, and the current repository.
+Check whether the project satisfies all required deliverables:
+working app, public hosted URL, GitHub repository, code folder with README and requirements,
+data folder with offline snapshot, brief.pdf under 4 pages, prompts.md, and all six
+core capabilities. List only issues that should be fixed before submission.
+```
+
+Purpose: verify the project against the official requirements rather than only against implementation assumptions.
+
+```text
+Inspect the final ZIP file. It must be named LastName_FirstName_BAX423_Final.zip and
+its root must directly contain code/, data/, brief.pdf, prompts.md, and requirements.txt.
+Flag nested top-level folders, __MACOSX files, .DS_Store files, pycache files, temporary
+test scripts, and any real secrets.toml file.
+```
+
+Purpose: ensure the Canvas upload has the required structure and does not leak API keys.
+
+```text
+Check the Streamlit deployment and documentation. Confirm the live URL is present in
+brief.md / brief.pdf and README, confirm the app is public, and explain what works
+without local secrets versus what requires Streamlit Cloud secrets.
+```
+
+Purpose: distinguish safe local offline demo behavior from hosted Gemini/Adzuna API functionality.
+
+```text
+Explain how constraints that are not explicit database columns are implemented.
+For company size, H-1B sponsorship, defense/military, contract/temp, and seniority,
+identify whether the project uses structured fields or text-based proxy rules, and
+rewrite the brief so it is transparent about those limitations.
+```
+
+Purpose: avoid overstating the dataset and make the limitations clear for grading and live demo questions.
