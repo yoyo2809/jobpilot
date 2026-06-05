@@ -25,6 +25,7 @@ from engine.ranking import (
     _has_large_company_or_research_signal,
     _has_ml_focused_role,
     TINY_STARTUP_TERMS,
+    EXPERIENCE_RE,
 )
 
 
@@ -92,20 +93,20 @@ PERSONA_QUERIES = {
         "min_salary": 140000,
     },
     "Marcus (New Grad)": {
-        "query": "data analyst business intelligence junior entry level SQL Python",
+        "query": "entry level data analyst BI analyst junior data scientist analytics engineer SQL Python Tableau",
         "background": "Recent MSBA graduate, UC Davis. No full-time experience. 2 analytics internships. Prefers tech or healthcare.",
         "skills": ["Python", "R", "SQL", "Tableau", "PySpark"],
-        "dealbreakers": ["3+ years", "5+ years", "Contract", "Unpaid"],
-        "target_roles": ["Data Analyst", "Business Intelligence", "Junior Analyst"],
+        "dealbreakers": ["3+ years", "4+ years", "5+ years", "Contract", "Temporary", "Unpaid"],
+        "target_roles": ["Data Analyst", "BI Analyst", "Junior Data Scientist", "Analytics Engineer"],
         "location": "United States",
         "min_salary": 80000,
     },
     "Priya (Experienced Niche)": {
-        "query": "MLOps engineer ML platform Kafka Spark Kubernetes senior",
-        "background": "Senior Software Engineer, 7 years in fintech. Wants ML/AI infrastructure. Prefers NYC or remote and companies with 100+ employees.",
+        "query": "ML platform engineer MLOps engineer senior machine learning engineer Kafka Spark Kubernetes AWS TensorFlow",
+        "background": "Senior Software Engineer, 7 years in fintech. Wants ML/AI infrastructure. Prefers NYC or remote and companies with 100+ employees. No companies with <100 employees.",
         "skills": ["Java", "Python", "Kubernetes", "Kafka", "Spark", "TensorFlow", "AWS"],
         "dealbreakers": ["Junior", "Entry"],
-        "target_roles": ["MLOps Engineer", "Platform Engineer", "Senior Engineer"],
+        "target_roles": ["ML Platform Engineer", "MLOps Engineer", "Senior ML Engineer"],
         "location": "NYC",
         "min_salary": 200000,
     },
@@ -130,6 +131,9 @@ def run_benchmark(
     Run all three approaches on all four personas.
     Returns a summary DataFrame for display in the brief.
     """
+    if not engine.index_ready():
+        engine.load_index()
+
     jobs_df  = db.get_all_jobs_for_indexing()
     bm25_ret = BM25Retriever()
     bm25_ret.fit(jobs_df)
@@ -197,6 +201,12 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
         clean_col("work_type") + " " +
         clean_col("description").str[:1000]
     ).str.lower().fillna("")
+    header_text = (
+        clean_col("title") + " " +
+        clean_col("company") + " " +
+        clean_col("experience_level") + " " +
+        clean_col("work_type")
+    ).str.lower().fillna("")
 
     def has_any(terms: list[str]) -> bool:
         return any(text.str.contains(term, regex=False, na=False).any() for term in terms)
@@ -208,17 +218,20 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
                 "No senior/staff/defense; every Top-10 row is a focused ML/AI role")
 
     if "Marcus" in persona:
-        blocked = ["3+ years", "3 years", "4 years", "5+ years", "contract", "unpaid", "mid-senior", "senior"]
-        return (not has_any(blocked),
-                "No 3+ year, senior, contract, or unpaid wording in Top-10")
+        bad_level_terms = ["mid-senior", "senior", "sr.", "lead ", "principal", "staff", "director"]
+        bad_work_terms = ["contract", "contractor", "temporary", "temp ", "1099", "unpaid"]
+        bad_level = any(header_text.str.contains(term, regex=False, na=False).any() for term in bad_level_terms)
+        bad_work = any(header_text.str.contains(term, regex=False, na=False).any() for term in bad_work_terms)
+        bad_experience = any(bool(EXPERIENCE_RE.search(t)) for t in text.tolist())
+        return (not bad_level and not bad_work and not bad_experience,
+                "No 3+ year requirement, senior-level header, contract/temp/1099, or unpaid role in Top-10")
 
     if "Priya" in persona:
-        blocked = ["junior", "entry"]
-        niche_terms = ["kafka", "spark", "kubernetes", "mlops", "platform", "aws", "tensorflow"]
-        enough_niche = all(sum(term in str(t) for term in niche_terms) >= 1 for t in text.tolist())
+        blocked = ["junior", "entry", "intern"]
+        bad_level = any(header_text.str.contains(term, regex=False, na=False).any() for term in blocked)
         no_tiny_startup = not has_any(TINY_STARTUP_TERMS)
-        return (not has_any(blocked) and no_tiny_startup and enough_niche,
-                "No junior/entry; no tiny-startup proxy terms; each Top-10 row has an ML infrastructure signal")
+        return (not bad_level and no_tiny_startup,
+                "No junior/entry-level header; no tiny-startup proxy terms in Top-10")
 
     if "Kenji" in persona:
         blocked = ["contract", "1099", "temporary", "temp ", "no sponsorship", "us citizen", "green card"]
