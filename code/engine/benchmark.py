@@ -40,7 +40,8 @@ def dcg(relevances: List[int]) -> float:
 def ndcg_at_k(ranked_ids: List[str], relevant_ids: set, k: int = 10) -> float:
     top_k = ranked_ids[:k]
     rels  = [1 if jid in relevant_ids else 0 for jid in top_k]
-    ideal = sorted(rels, reverse=True)
+    ideal = [1] * min(len(relevant_ids), k)
+    ideal += [0] * (k - len(ideal))
     d     = dcg(rels)
     i     = dcg(ideal)
     return d / i if i > 0 else 0.0
