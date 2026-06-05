@@ -25,7 +25,6 @@ from engine.ranking import (
     _has_large_company_or_research_signal,
     _has_ml_focused_role,
     TINY_STARTUP_TERMS,
-    EXPERIENCE_RE,
 )
 
 
@@ -222,7 +221,18 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
         bad_work_terms = ["contract", "contractor", "temporary", "temp ", "1099", "unpaid"]
         bad_level = any(header_text.str.contains(term, regex=False, na=False).any() for term in bad_level_terms)
         bad_work = any(header_text.str.contains(term, regex=False, na=False).any() for term in bad_work_terms)
-        bad_experience = any(bool(EXPERIENCE_RE.search(t)) for t in text.tolist())
+        strict_exp_patterns = [
+            "3+ years experience", "3+ years of experience",
+            "4+ years experience", "4+ years of experience",
+            "5+ years experience", "5+ years of experience",
+            "minimum 3 years", "minimum of 3 years",
+            "at least 3 years", "requires 3 years",
+            "required 3 years", "3 years required",
+        ]
+        bad_experience = any(
+            any(pattern in t for pattern in strict_exp_patterns)
+            for t in text.tolist()
+        )
         return (not bad_level and not bad_work and not bad_experience,
                 "No 3+ year requirement, senior-level header, contract/temp/1099, or unpaid role in Top-10")
 
