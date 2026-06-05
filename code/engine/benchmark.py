@@ -184,13 +184,19 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
         return False, "No ranked jobs returned"
 
     top = ranked_df.head(10).copy()
+
+    def clean_col(name: str) -> pd.Series:
+        if name not in top.columns:
+            return pd.Series([""] * len(top), index=top.index)
+        return top[name].fillna("").astype(str)
+
     text = (
-        top.get("title", "").astype(str) + " " +
-        top.get("company", "").astype(str) + " " +
-        top.get("experience_level", "").astype(str) + " " +
-        top.get("work_type", "").astype(str) + " " +
-        top.get("description", "").astype(str).str[:1000]
-    ).str.lower()
+        clean_col("title") + " " +
+        clean_col("company") + " " +
+        clean_col("experience_level") + " " +
+        clean_col("work_type") + " " +
+        clean_col("description").str[:1000]
+    ).str.lower().fillna("")
 
     def has_any(terms: list[str]) -> bool:
         return any(text.str.contains(term, regex=False, na=False).any() for term in terms)
@@ -209,7 +215,7 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
     if "Priya" in persona:
         blocked = ["junior", "entry"]
         niche_terms = ["kafka", "spark", "kubernetes", "mlops", "platform", "aws", "tensorflow"]
-        enough_niche = all(sum(term in t for term in niche_terms) >= 1 for t in text.tolist())
+        enough_niche = all(sum(term in str(t) for term in niche_terms) >= 1 for t in text.tolist())
         no_tiny_startup = not has_any(TINY_STARTUP_TERMS)
         return (not has_any(blocked) and no_tiny_startup and enough_niche,
                 "No junior/entry; no tiny-startup proxy terms; each Top-10 row has an ML infrastructure signal")
