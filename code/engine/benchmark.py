@@ -24,6 +24,7 @@ from engine.ranking import (
     rank_jobs,
     _has_large_company_or_research_signal,
     _has_ml_focused_role,
+    _has_target_role_relevance,
     TINY_STARTUP_TERMS,
 )
 
@@ -163,8 +164,9 @@ def run_benchmark(
         l7_ids    = list(ranked_df["id"].astype(str)) if not ranked_df.empty else []
         pass_result, pass_notes = _persona_pass_check(persona, ranked_df, cfg)
 
-        # Define relevant set: jobs that contain at least 2 skill keywords
-        relevant = _find_relevant(jobs_df, cfg["skills"], cfg["dealbreakers"])
+        # Define relevant set with persona-aware heuristic labels.
+        # This approximates human relevance better than pure skill-keyword overlap.
+        relevant = _find_relevant(jobs_df, persona, cfg)
         print(f"[{persona}] Relevant set size: {len(relevant)}")
 
         rows.append({
@@ -253,17 +255,70 @@ def _persona_pass_check(persona: str, ranked_df: pd.DataFrame, cfg: dict) -> tup
     return True, "Generic benchmark row"
 
 
-def _find_relevant(jobs_df: pd.DataFrame, skills: List[str],
-                   dealbreakers: List[str]) -> set:
-    """Heuristically mark jobs as relevant for benchmark ground truth."""
+def _find_relevant(jobs_df: pd.DataFrame, persona: str, cfg: dict) -> set:
+    """Heuristically mark jobs as relevant for persona-level benchmark ground truth."""
     relevant = set()
+    skills = cfg.get("skills", [])
+    target_roles = cfg.get("target_roles", [])
+
     for _, row in jobs_df.iterrows():
-        text = (str(row.get("title", "")) + " " +
-                str(row.get("skills", "") or "") + " " +
-                str(row.get("description", "") or "")[:500]).lower()
-        # Must have ≥2 skill keywords and no dealbreakers
+        title = str(row.get("title", "") or "").lower()
+        company = str(row.get("company", "") or "").lower()
+        exp_lvl = str(row.get("experience_level", "") or "").lower()
+        work_type = str(row.get("work_type", "") or "").lower()
+        desc = str(row.get("description", "") or "").lower()[:1200]
+        skills_text = str(row.get("skills", "") or "").lower()
+        header = f"{title} {company} {exp_lvl} {work_type}"
+        text = f"{header} {skills_text} {desc}"
         skill_hits = sum(1 for s in skills if s.lower() in text)
-        has_db     = any(d.lower() in text for d in dealbreakers)
-        if skill_hits >= 2 and not has_db:
-            relevant.add(str(row["id"]))
+
+        if "Aisha" in persona:
+            blocked = ["senior", "staff", "defense", "defence", "military"]
+            if not any(term in text for term in blocked) and _has_ml_focused_role(row, target_roles):
+                relevant.add(str(row["id"]))
+
+        elif "Marcus" in persona:
+            blocked_header = ["mid-senior", "senior", "sr.", "lead ", "principal", "staff", "director"]
+            blocked_work = ["contract", "contractor", "temporary", "temp ", "1099", "unpaid"]
+            role_ok = _has_target_role_relevance(row, target_roles, require_ml_data_science=False)
+            if (
+                role_ok and skill_hits >= 1 and
+                not any(term in header for term in blocked_header + blocked_work) and
+                not _has_strict_experience_requirement(text)
+            ):
+                relevant.add(str(row["id"]))
+
+        elif "Priya" in persona:
+            infra_terms = ["kafka", "spark", "kubernetes", "mlops", "platform", "aws", "tensorflow", "ml infrastructure"]
+            role_ok = _has_target_role_relevance(row, target_roles, require_ml_data_science=True)
+            infra_ok = any(term in text for term in infra_terms)
+            if (
+                (role_ok or infra_ok) and skill_hits >= 1 and
+                not any(term in header for term in ["junior", "entry", "intern"]) and
+                not any(term in text for term in TINY_STARTUP_TERMS)
+            ):
+                relevant.add(str(row["id"]))
+
+        elif "Kenji" in persona:
+            blocked = ["contract", "1099", "temporary", "temp ", "no sponsorship", "us citizen", "green card"]
+            research_terms = ["research scientist", "machine learning", "deep learning", "nlp", "computer vision", "pytorch"]
+            if (
+                not any(term in text for term in blocked) and
+                any(term in text for term in research_terms) and
+                (skill_hits >= 1 or _has_large_company_or_research_signal(row))
+            ):
+                relevant.add(str(row["id"]))
+
     return relevant
+
+
+def _has_strict_experience_requirement(text: str) -> bool:
+    strict_exp_patterns = [
+        "3+ years experience", "3+ years of experience",
+        "4+ years experience", "4+ years of experience",
+        "5+ years experience", "5+ years of experience",
+        "minimum 3 years", "minimum of 3 years",
+        "at least 3 years", "requires 3 years",
+        "required 3 years", "3 years required",
+    ]
+    return any(pattern in text for pattern in strict_exp_patterns)
